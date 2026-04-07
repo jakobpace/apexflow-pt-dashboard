@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import React, { useState } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -75,12 +75,42 @@ const newDay = (n: number): WorkoutDay => ({
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 
-const NAV: { id: View; label: string; icon: string }[] = [
-  { id: 'builder',  label: 'Workout Builder', icon: '⚡' },
-  { id: 'programs', label: 'Programs',        icon: '📋' },
-  { id: 'clients',  label: 'Clients',         icon: '👥' },
-  { id: 'calendar', label: 'Calendar',        icon: '📅' },
-  { id: 'settings', label: 'Settings',        icon: '⚙️' },
+const NAV_ICONS: Record<View, React.ReactNode> = {
+  builder: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="3" width="14" height="11" rx="1.5"/><line x1="1" y1="6.5" x2="15" y2="6.5"/><line x1="5" y1="1" x2="5" y2="5"/><line x1="11" y1="1" x2="11" y2="5"/>
+      <line x1="4" y1="10" x2="7" y2="10"/><line x1="4" y1="12.5" x2="9" y2="12.5"/>
+    </svg>
+  ),
+  programs: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="1" width="10" height="14" rx="1.5"/><line x1="5.5" y1="5" x2="10.5" y2="5"/><line x1="5.5" y1="8" x2="10.5" y2="8"/><line x1="5.5" y1="11" x2="8.5" y2="11"/>
+    </svg>
+  ),
+  clients: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="6" cy="5" r="2.5"/><path d="M1 14c0-3 2-4.5 5-4.5s5 1.5 5 4.5"/><circle cx="12" cy="5" r="2"/><path d="M14.5 13.5c0-2-1.2-3.5-3-3.8"/>
+    </svg>
+  ),
+  calendar: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="1" y="3" width="14" height="11" rx="1.5"/><line x1="1" y1="6.5" x2="15" y2="6.5"/><line x1="5" y1="1" x2="5" y2="5"/><line x1="11" y1="1" x2="11" y2="5"/>
+      <rect x="4.5" y="9" width="2" height="2" rx="0.5"/>
+    </svg>
+  ),
+  settings: (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="8" cy="8" r="2"/><path d="M8 1v1.5M8 13.5V15M1 8h1.5M13.5 8H15M2.9 2.9l1.1 1.1M12 12l1.1 1.1M2.9 13.1l1.1-1.1M12 4l1.1-1.1"/>
+    </svg>
+  ),
+};
+
+const NAV: { id: View; label: string }[] = [
+  { id: 'builder',  label: 'Workout Builder' },
+  { id: 'programs', label: 'Programs' },
+  { id: 'clients',  label: 'Clients' },
+  { id: 'calendar', label: 'Calendar' },
+  { id: 'settings', label: 'Settings' },
 ];
 
 // ─── Main Component ───────────────────────────────────────────────────────────
@@ -176,7 +206,7 @@ export default function PTDashboard() {
                   : 'text-stone-600 hover:bg-stone-100 hover:text-stone-900'
               }`}
             >
-              <span className="text-base shrink-0">{n.icon}</span>
+              <span className="shrink-0">{NAV_ICONS[n.id]}</span>
               {sidebarOpen && <span>{n.label}</span>}
             </button>
           ))}
@@ -297,7 +327,7 @@ export default function PTDashboard() {
                 onClick={() => { setLibraryTarget(null); setShowLibrary(s => !s); }}
                 className="px-4 py-2.5 bg-stone-100 border border-stone-200 text-stone-700 text-sm rounded-xl hover:bg-stone-200 transition-all"
               >
-                {showLibrary ? 'Close Library' : '📚 Exercise Library'}
+                {showLibrary ? 'Close Library' : 'Exercise Library'}
               </button>
             </div>
 
@@ -364,7 +394,7 @@ export default function PTDashboard() {
                         onClick={() => { setLibraryTarget(ex.id); setShowLibrary(true); }}
                         className="text-stone-400 hover:text-green-600 text-xs opacity-0 group-hover:opacity-100 transition-all shrink-0"
                         title="Pick from library"
-                      >📚</button>
+                      >+</button>
                     </div>
                     {(['sets','reps','weight','rpe','tempo'] as (keyof Exercise)[]).map(field => (
                       <input
@@ -424,7 +454,6 @@ export default function PTDashboard() {
 
             {programs.length === 0 ? (
               <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
-                <p className="text-3xl mb-3">📋</p>
                 <p className="text-stone-700 font-medium mb-1">No programs yet</p>
                 <p className="text-stone-500 text-sm mb-5">Build your first program in the Workout Builder</p>
                 <button onClick={() => setView('builder')} className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all">
@@ -501,7 +530,6 @@ export default function PTDashboard() {
               </div>
             </div>
             <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
-              <p className="text-3xl mb-3">📅</p>
               <p className="text-stone-700 font-medium mb-1">Calendar coming soon</p>
               <p className="text-stone-500 text-sm">Session scheduling, reminders, and availability management</p>
             </div>
