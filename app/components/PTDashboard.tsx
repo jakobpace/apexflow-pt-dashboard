@@ -445,6 +445,7 @@ export default function PTDashboard() {
   const [libraryTarget, setLibraryTarget] = useState<string | null>(null);
   const [expandedMuscle, setExpandedMuscle] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
+  const [copyDayTarget, setCopyDayTarget] = useState<{ wi: number; di: number } | null>(null);
 
   const week = program.weekBlocks[activeWeek] ?? program.weekBlocks[0];
   const day = week?.days[activeDay] ?? week?.days[0];
@@ -550,6 +551,23 @@ export default function PTDashboard() {
     if (w.days.length === 1) return;
     updateWeekDays(wi, w.days.filter((_, i) => i !== di));
     if (activeWeek === wi) setActiveDay(Math.min(activeDay, w.days.length - 2));
+  };
+
+  const copyDayToWeek = (sourceWi: number, sourceDi: number, targetWi: number) => {
+    const source = program.weekBlocks[sourceWi].days[sourceDi];
+    const copy: WorkoutDay = {
+      id: `day-${Date.now()}-${Math.random()}`,
+      name: source.name,
+      exercises: source.exercises.map(e => ({
+        ...e,
+        id: `ex-${Date.now()}-${Math.random()}`,
+        setRows: e.setRows.map(s => ({ ...s, id: `set-${Date.now()}-${Math.random()}` })),
+      })),
+    };
+    const targetDays = [...program.weekBlocks[targetWi].days, copy];
+    updateWeekDays(targetWi, targetDays);
+    setActiveWeek(targetWi);
+    setActiveDay(targetDays.length - 1);
   };
 
   const addWeek = () => {
@@ -809,33 +827,51 @@ export default function PTDashboard() {
 
                       {/* Day tabs for this week */}
                       <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
-                        {w.days.map((d, di) => (
-                          <div key={d.id} className="flex items-center shrink-0 gap-0.5">
-                            <button
-                              onClick={() => { setActiveWeek(wi); setActiveDay(di); }}
-                              className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                                activeWeek === wi && activeDay === di
-                                  ? 'bg-green-600 text-white shadow-sm'
-                                  : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-                              }`}
-                            >
-                              {d.name}
-                            </button>
-                            <button
-                              onClick={() => duplicateDay(wi, di)}
-                              className="w-5 h-5 rounded text-stone-400 hover:text-green-600 hover:bg-green-50 flex items-center justify-center transition-colors"
-                              title="Duplicate day"
-                            >
-                              <IconCopy size={11} />
-                            </button>
-                            {w.days.length > 1 && (
+                        {w.days.map((d, di) => {
+                          const isPickerOpen = copyDayTarget?.wi === wi && copyDayTarget?.di === di;
+                          return (
+                            <div key={d.id} className="relative flex items-center shrink-0 gap-0.5">
                               <button
-                                onClick={() => removeDay(wi, di)}
-                                className="w-5 h-5 rounded text-stone-400 hover:text-red-500 text-xs flex items-center justify-center transition-colors"
-                              >×</button>
-                            )}
-                          </div>
-                        ))}
+                                onClick={() => { setActiveWeek(wi); setActiveDay(di); }}
+                                className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                  activeWeek === wi && activeDay === di
+                                    ? 'bg-green-600 text-white shadow-sm'
+                                    : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                                }`}
+                              >
+                                {d.name}
+                              </button>
+                              <button
+                                onClick={() => setCopyDayTarget(isPickerOpen ? null : { wi, di })}
+                                className="w-5 h-5 rounded text-stone-400 hover:text-green-600 hover:bg-green-50 flex items-center justify-center transition-colors"
+                                title="Copy to week…"
+                              >
+                                <IconCopy size={11} />
+                              </button>
+                              {w.days.length > 1 && (
+                                <button
+                                  onClick={() => removeDay(wi, di)}
+                                  className="w-5 h-5 rounded text-stone-400 hover:text-red-500 text-xs flex items-center justify-center transition-colors"
+                                >×</button>
+                              )}
+                              {/* Week picker dropdown */}
+                              {isPickerOpen && (
+                                <div className="absolute top-full left-0 mt-1 z-20 bg-white border border-stone-200 rounded-xl shadow-lg py-1 min-w-[9rem]">
+                                  <p className="text-[9px] text-stone-400 uppercase tracking-widest font-medium px-3 pt-1.5 pb-1">Copy to week</p>
+                                  {program.weekBlocks.map((wb, ti) => (
+                                    <button
+                                      key={wb.id}
+                                      onClick={() => { copyDayToWeek(wi, di, ti); setCopyDayTarget(null); }}
+                                      className="w-full text-left px-3 py-1.5 text-sm text-stone-700 hover:bg-stone-50 hover:text-green-700 transition-colors"
+                                    >
+                                      {wb.name}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
                         <button
                           onClick={() => addDay(wi)}
                           className="shrink-0 px-3 py-1.5 rounded-lg text-xs text-stone-500 border border-dashed border-stone-300 hover:border-green-400 hover:text-green-600 transition-all"
