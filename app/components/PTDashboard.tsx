@@ -155,6 +155,163 @@ function blankProgram(): Program {
   };
 }
 
+// ─── Demo data ────────────────────────────────────────────────────────────────
+
+function demoEx(name: string, sets: number, reps: string, weight: string, rest = '90s', type: SetType = 'working'): Exercise {
+  return {
+    id: `ex-${Math.random()}`,
+    name,
+    setRows: Array.from({ length: sets }, () => ({ id: `s-${Math.random()}`, type, reps, weight, rpe: '' })),
+    tempo: '',
+    rest,
+    notes: '',
+  };
+}
+
+function demoWarmupEx(name: string, warmupSets: [string, string][], workSets: [string, string][], rest = '3min'): Exercise {
+  return {
+    id: `ex-${Math.random()}`,
+    name,
+    setRows: [
+      ...warmupSets.map(([r, w]) => ({ id: `s-${Math.random()}`, type: 'warmup' as SetType, reps: r, weight: w, rpe: '' })),
+      ...workSets.map(([r, w]) => ({ id: `s-${Math.random()}`, type: 'working' as SetType, reps: r, weight: w, rpe: '' })),
+    ],
+    tempo: '',
+    rest,
+    notes: '',
+  };
+}
+
+function demoDay(name: string, exercises: Exercise[]): WorkoutDay {
+  return { id: `day-${Math.random()}`, name, exercises };
+}
+
+function demoWeek(n: number, days: WorkoutDay[]): Week {
+  return { id: `week-${Math.random()}`, name: `Week ${n}`, days };
+}
+
+function makeDemoData(): { clients: Client[]; programs: Program[] } {
+  const push = () => demoDay('Push', [
+    demoWarmupEx('Bench Press', [['8', '60']], [['6', '80'], ['6', '82.5'], ['6', '85']], '3min'),
+    demoEx('Incline Dumbbell Press', 3, '10', '28'),
+    demoEx('Overhead Press', 3, '8', '50'),
+    demoEx('Lateral Raise', 4, '15', '10', '60s'),
+    demoEx('Tricep Pushdown', 3, '12', '25', '60s'),
+  ]);
+
+  const pull = () => demoDay('Pull', [
+    demoWarmupEx('Pull Up', [['5', 'BW']], [['6', 'BW'], ['6', 'BW'], ['6', '+5kg']]),
+    demoEx('Barbell Row', 4, '8', '80'),
+    demoEx('Lat Pulldown', 3, '10', '55'),
+    demoEx('Face Pull', 3, '15', '20', '60s'),
+    demoEx('Barbell Curl', 3, '12', '30', '60s'),
+  ]);
+
+  const legs = () => demoDay('Legs', [
+    demoWarmupEx('Squat', [['8', '60'], ['5', '80']], [['5', '100'], ['5', '105'], ['5', '105']], '4min'),
+    demoEx('Romanian Deadlift', 3, '10', '80'),
+    demoEx('Leg Press', 3, '12', '140'),
+    demoEx('Leg Curl', 3, '12', '40', '60s'),
+    demoEx('Calf Raise', 4, '15', '60', '45s'),
+  ]);
+
+  const upper = () => demoDay('Upper', [
+    demoWarmupEx('Bench Press', [['5', '60']], [['5', '90'], ['5', '90'], ['5', '90']], '3min'),
+    demoEx('Barbell Row', 4, '5', '90', '3min'),
+    demoEx('Overhead Press', 3, '8', '55'),
+    demoEx('Pull Up', 3, '8', 'BW'),
+    demoEx('Lateral Raise', 3, '15', '10', '45s'),
+  ]);
+
+  const lower = () => demoDay('Lower', [
+    demoWarmupEx('Squat', [['5', '60'], ['3', '80']], [['3', '110'], ['3', '110'], ['3', '115']], '4min'),
+    demoWarmupEx('Deadlift', [['3', '100']], [['3', '140'], ['3', '145']], '4min'),
+    demoEx('Leg Press', 3, '10', '150'),
+    demoEx('Leg Curl', 3, '12', '45', '60s'),
+  ]);
+
+  const programs: Program[] = [
+    {
+      id: 'demo-p1',
+      name: '8 Week Push / Pull / Legs',
+      clientId: 'c1',
+      weekBlocks: [
+        demoWeek(1, [push(), pull(), legs()]),
+        demoWeek(2, [push(), pull(), legs()]),
+        demoWeek(3, [push(), pull(), legs()]),
+        demoWeek(4, [push(), pull(), legs()]),
+        demoWeek(5, [push(), pull(), legs()]),
+        demoWeek(6, [push(), pull(), legs()]),
+        demoWeek(7, [push(), pull(), legs()]),
+        demoWeek(8, [push(), pull(), legs()]),
+      ],
+      createdAt: new Date(Date.now() - 7 * 86400000).toISOString(),
+      notes: 'Progressive overload — add 2.5 kg to main lifts every week where RPE allows. Deload in week 5.',
+    },
+    {
+      id: 'demo-p2',
+      name: '4 Week Strength Block',
+      clientId: 'c4',
+      weekBlocks: [
+        demoWeek(1, [upper(), lower(), upper(), lower()]),
+        demoWeek(2, [upper(), lower(), upper(), lower()]),
+        demoWeek(3, [upper(), lower(), upper(), lower()]),
+        demoWeek(4, [upper(), lower(), upper(), lower()]),
+      ],
+      createdAt: new Date(Date.now() - 3 * 86400000).toISOString(),
+      notes: 'Upper / Lower split — Tom competes in 12 weeks. Keep intensity high, manage fatigue going into Week 4.',
+    },
+    {
+      id: 'demo-p3',
+      name: '6 Week Fat Loss Circuit',
+      clientId: 'c3',
+      weekBlocks: [
+        demoWeek(1, [
+          demoDay('Full Body A', [
+            demoEx('Squat', 4, '12', '60', '45s'),
+            demoEx('Dumbbell Row', 4, '12', '20', '45s'),
+            demoEx('Dumbbell Fly', 3, '15', '14', '45s'),
+            demoEx('Plank', 3, '45s', '', '30s'),
+          ]),
+          demoDay('Full Body B', [
+            demoEx('Romanian Deadlift', 4, '12', '60', '45s'),
+            demoEx('Overhead Press', 4, '10', '30', '45s'),
+            demoEx('Walking Lunges', 3, '16', '20', '45s'),
+            demoEx('Ab Wheel', 3, '12', '', '30s'),
+          ]),
+        ]),
+        demoWeek(2, [
+          demoDay('Full Body A', [
+            demoEx('Squat', 4, '12', '62.5', '45s'),
+            demoEx('Dumbbell Row', 4, '12', '22', '45s'),
+            demoEx('Dumbbell Fly', 3, '15', '14', '45s'),
+            demoEx('Plank', 3, '50s', '', '30s'),
+          ]),
+          demoDay('Full Body B', [
+            demoEx('Romanian Deadlift', 4, '12', '62.5', '45s'),
+            demoEx('Overhead Press', 4, '10', '32', '45s'),
+            demoEx('Walking Lunges', 3, '16', '22', '45s'),
+            demoEx('Ab Wheel', 3, '12', '', '30s'),
+          ]),
+        ]),
+        demoWeek(3, []),
+        demoWeek(4, []),
+        demoWeek(5, []),
+        demoWeek(6, []),
+      ],
+      createdAt: new Date(Date.now() - 1 * 86400000).toISOString(),
+      notes: 'Minimal rest to keep heart rate elevated. Weeks 3–6 to be built out.',
+    },
+  ];
+
+  // Ensure week 3-6 of demo-p3 have at least one blank day
+  programs[2].weekBlocks = programs[2].weekBlocks.map((w, i) =>
+    i >= 2 ? { ...w, days: [demoDay('Full Body A', [demoEx('Squat', 4, '12', '', '45s')])] } : w
+  );
+
+  return { clients: DEMO_CLIENTS, programs };
+}
+
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
 function IconChevronLeft({ size = 16 }: { size?: number }) {
@@ -653,6 +810,23 @@ export default function PTDashboard() {
   const deleteProgram = (id: string) => {
     if (!window.confirm('Delete this program? This action cannot be undone.')) return;
     setPrograms(prev => prev.filter(p => p.id !== id));
+  };
+
+  const loadDemoData = () => {
+    const { clients: demoClients, programs: demoPrograms } = makeDemoData();
+    setClients(demoClients);
+    setPrograms(demoPrograms);
+    localStorage.setItem(LS_CLIENTS_KEY, JSON.stringify(demoClients));
+    localStorage.setItem(LS_PROGRAMS_KEY, JSON.stringify(demoPrograms));
+    setView('clients');
+  };
+
+  const clearDemoData = () => {
+    if (!window.confirm('Clear all demo data? This will remove all clients and programs.')) return;
+    setClients([]);
+    setPrograms([]);
+    localStorage.removeItem(LS_CLIENTS_KEY);
+    localStorage.removeItem(LS_PROGRAMS_KEY);
   };
 
   const openBuilderWithClient = (clientId: string) => {
@@ -1275,7 +1449,7 @@ export default function PTDashboard() {
               <h1 className="text-2xl font-bold text-stone-900">Settings</h1>
               <p className="text-sm text-stone-600 mt-0.5">Your profile and preferences</p>
             </div>
-            <div className="bg-white rounded-2xl border border-stone-200 p-6 space-y-5">
+            <div className="bg-white rounded-2xl border border-stone-200 p-6 space-y-5 mb-5">
               {[
                 { label: 'Full Name', placeholder: 'Jakob Pace', type: 'text' },
                 { label: 'Email', placeholder: 'jakob@apexflow.com', type: 'email' },
@@ -1288,6 +1462,26 @@ export default function PTDashboard() {
                 </div>
               ))}
               <button className="w-full py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all mt-2">Save Changes</button>
+            </div>
+
+            {/* Demo data */}
+            <div className="bg-white rounded-2xl border border-stone-200 p-6">
+              <h2 className="text-sm font-semibold text-stone-900 mb-1">Demo Mode</h2>
+              <p className="text-xs text-stone-500 mb-4">Load sample clients and programs to demo the platform to a prospect. Clear when done.</p>
+              <div className="flex gap-3">
+                <button
+                  onClick={loadDemoData}
+                  className="flex-1 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all"
+                >
+                  Load Demo Data
+                </button>
+                <button
+                  onClick={clearDemoData}
+                  className="flex-1 py-2.5 bg-white border border-stone-200 text-stone-700 text-sm font-semibold rounded-xl hover:border-red-300 hover:text-red-600 transition-all"
+                >
+                  Clear All Data
+                </button>
+              </div>
             </div>
           </div>
         )}
