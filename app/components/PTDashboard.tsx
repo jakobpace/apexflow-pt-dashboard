@@ -1464,25 +1464,6 @@ export default function PTDashboard() {
               <button className="w-full py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all mt-2">Save Changes</button>
             </div>
 
-            {/* Demo data */}
-            <div className="bg-white rounded-2xl border border-stone-200 p-6">
-              <h2 className="text-sm font-semibold text-stone-900 mb-1">Demo Mode</h2>
-              <p className="text-xs text-stone-500 mb-4">Load sample clients and programs to demo the platform to a prospect. Clear when done.</p>
-              <div className="flex gap-3">
-                <button
-                  onClick={loadDemoData}
-                  className="flex-1 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all"
-                >
-                  Load Demo Data
-                </button>
-                <button
-                  onClick={clearDemoData}
-                  className="flex-1 py-2.5 bg-white border border-stone-200 text-stone-700 text-sm font-semibold rounded-xl hover:border-red-300 hover:text-red-600 transition-all"
-                >
-                  Clear All Data
-                </button>
-              </div>
-            </div>
           </div>
         )}
 
