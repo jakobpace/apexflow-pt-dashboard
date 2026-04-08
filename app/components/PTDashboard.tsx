@@ -45,12 +45,17 @@ type WorkoutDay = {
   exercises: Exercise[];
 };
 
+type Week = {
+  id: string;
+  name: string;
+  days: WorkoutDay[];
+};
+
 type Program = {
   id: string;
   name: string;
   clientId: string;
-  weeks: number;
-  days: WorkoutDay[];
+  weekBlocks: Week[];
   createdAt: string;
   notes: string;
 };
@@ -133,13 +138,18 @@ const newDay = (n: number): WorkoutDay => ({
   exercises: [newExercise()],
 });
 
+const newWeek = (n: number): Week => ({
+  id: `week-${Date.now()}-${Math.random()}`,
+  name: `Week ${n}`,
+  days: [newDay(1)],
+});
+
 function blankProgram(): Program {
   return {
     id: `prog-${Date.now()}`,
     name: '',
     clientId: '',
-    weeks: 4,
-    days: [newDay(1)],
+    weekBlocks: [newWeek(1), newWeek(2), newWeek(3), newWeek(4)],
     createdAt: new Date().toISOString(),
     notes: '',
   };
@@ -429,16 +439,26 @@ export default function PTDashboard() {
 
   // ── Builder state ──
   const [program, setProgram] = useState<Program>(blankProgram());
+  const [activeWeek, setActiveWeek] = useState(0);
   const [activeDay, setActiveDay] = useState(0);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryTarget, setLibraryTarget] = useState<string | null>(null);
   const [expandedMuscle, setExpandedMuscle] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
 
-  const day = program.days[activeDay] ?? program.days[0];
+  const week = program.weekBlocks[activeWeek] ?? program.weekBlocks[0];
+  const day = week?.days[activeDay] ?? week?.days[0];
+
+  const updateWeekDays = (wi: number, days: WorkoutDay[]) => {
+    setProgram(p => ({
+      ...p,
+      weekBlocks: p.weekBlocks.map((w, i) => i === wi ? { ...w, days } : w),
+    }));
+  };
 
   const updateDay = (updated: WorkoutDay) => {
-    setProgram(p => ({ ...p, days: p.days.map((d, i) => i === activeDay ? updated : d) }));
+    const days = week.days.map((d, i) => i === activeDay ? updated : d);
+    updateWeekDays(activeWeek, days);
   };
 
   const updateExercise = (exId: string, field: 'name' | 'tempo' | 'rest' | 'notes', value: string) => {
@@ -501,35 +521,69 @@ export default function PTDashboard() {
     updateDay({ ...day, exercises: day.exercises.filter(e => e.id !== exId) });
   };
 
-  const clearDay = () => {
-    updateDay({ ...day, exercises: [newExercise()] });
+  const clearDay = () => updateDay({ ...day, exercises: [newExercise()] });
+
+  const addDay = (wi: number) => {
+    const w = program.weekBlocks[wi];
+    const next = newDay(w.days.length + 1);
+    updateWeekDays(wi, [...w.days, next]);
+    setActiveWeek(wi);
+    setActiveDay(w.days.length);
   };
 
-  const addDay = () => {
-    const next = newDay(program.days.length + 1);
-    setProgram(p => ({ ...p, days: [...p.days, next] }));
-    setActiveDay(program.days.length);
-  };
-
-  const duplicateDay = (i: number) => {
-    const source = program.days[i];
+  const duplicateDay = (wi: number, di: number) => {
+    const source = program.weekBlocks[wi].days[di];
     const copy: WorkoutDay = {
       id: `day-${Date.now()}-${Math.random()}`,
       name: `${source.name} (copy)`,
       exercises: source.exercises.map(e => ({ ...e, id: `ex-${Date.now()}-${Math.random()}` })),
     };
-    setProgram(p => {
-      const days = [...p.days];
-      days.splice(i + 1, 0, copy);
-      return { ...p, days };
-    });
-    setActiveDay(i + 1);
+    const days = [...program.weekBlocks[wi].days];
+    days.splice(di + 1, 0, copy);
+    updateWeekDays(wi, days);
+    setActiveWeek(wi);
+    setActiveDay(di + 1);
   };
 
-  const removeDay = (i: number) => {
-    if (program.days.length === 1) return;
-    setProgram(p => ({ ...p, days: p.days.filter((_, idx) => idx !== i) }));
-    setActiveDay(Math.min(activeDay, program.days.length - 2));
+  const removeDay = (wi: number, di: number) => {
+    const w = program.weekBlocks[wi];
+    if (w.days.length === 1) return;
+    updateWeekDays(wi, w.days.filter((_, i) => i !== di));
+    if (activeWeek === wi) setActiveDay(Math.min(activeDay, w.days.length - 2));
+  };
+
+  const addWeek = () => {
+    const n = program.weekBlocks.length + 1;
+    setProgram(p => ({ ...p, weekBlocks: [...p.weekBlocks, newWeek(n)] }));
+    setActiveWeek(program.weekBlocks.length);
+    setActiveDay(0);
+  };
+
+  const duplicateWeek = (wi: number) => {
+    const source = program.weekBlocks[wi];
+    const copy: Week = {
+      id: `week-${Date.now()}-${Math.random()}`,
+      name: `${source.name} (copy)`,
+      days: source.days.map(d => ({
+        ...d,
+        id: `day-${Date.now()}-${Math.random()}`,
+        exercises: d.exercises.map(e => ({ ...e, id: `ex-${Date.now()}-${Math.random()}` })),
+      })),
+    };
+    setProgram(p => {
+      const blocks = [...p.weekBlocks];
+      blocks.splice(wi + 1, 0, copy);
+      return { ...p, weekBlocks: blocks };
+    });
+    setActiveWeek(wi + 1);
+    setActiveDay(0);
+  };
+
+  const removeWeek = (wi: number) => {
+    if (program.weekBlocks.length === 1) return;
+    setProgram(p => ({ ...p, weekBlocks: p.weekBlocks.filter((_, i) => i !== wi) }));
+    setActiveWeek(Math.min(activeWeek, program.weekBlocks.length - 2));
+    setActiveDay(0);
   };
 
   const handleSaveProgram = () => {
@@ -542,6 +596,7 @@ export default function PTDashboard() {
 
   const startNewProgram = () => {
     setProgram(blankProgram());
+    setActiveWeek(0);
     setActiveDay(0);
     setSaveState('idle');
     setShowLibrary(false);
@@ -564,10 +619,14 @@ export default function PTDashboard() {
       id: `prog-${Date.now()}`,
       name: `${prog.name} (copy)`,
       createdAt: new Date().toISOString(),
-      days: prog.days.map(d => ({
-        ...d,
-        id: `day-${Date.now()}-${Math.random()}`,
-        exercises: d.exercises.map(e => ({ ...e, id: `ex-${Date.now()}-${Math.random()}` })),
+      weekBlocks: prog.weekBlocks.map(w => ({
+        ...w,
+        id: `week-${Date.now()}-${Math.random()}`,
+        days: w.days.map(d => ({
+          ...d,
+          id: `day-${Date.now()}-${Math.random()}`,
+          exercises: d.exercises.map(e => ({ ...e, id: `ex-${Date.now()}-${Math.random()}` })),
+        })),
       })),
     };
     setPrograms(prev => [copy, ...prev]);
@@ -682,9 +741,9 @@ export default function PTDashboard() {
                 </div>
 
                 {/* Program meta */}
-                <div className="bg-white rounded-2xl border border-stone-200 p-5 mb-5">
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div className="md:col-span-1">
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 mb-6">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                    <div>
                       <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Program Name</label>
                       <input
                         value={program.name}
@@ -704,18 +763,8 @@ export default function PTDashboard() {
                         {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                       </select>
                     </div>
-                    <div>
-                      <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Duration (weeks)</label>
-                      <input
-                        type="number"
-                        value={program.weeks}
-                        onChange={e => setProgram(p => ({ ...p, weeks: parseInt(e.target.value) || 1 }))}
-                        min={1} max={52}
-                        className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 [appearance:textfield]"
-                      />
-                    </div>
                   </div>
-                  <div className="mt-3">
+                  <div>
                     <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Program Notes</label>
                     <textarea
                       value={program.notes}
@@ -727,54 +776,97 @@ export default function PTDashboard() {
                   </div>
                 </div>
 
-                {/* Day tabs */}
-                <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-                  {program.days.map((d, i) => (
-                    <div key={d.id} className="flex items-center shrink-0 gap-0.5">
-                      <button
-                        onClick={() => setActiveDay(i)}
-                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                          activeDay === i
-                            ? 'bg-green-600 text-white shadow-sm'
-                            : 'bg-white border border-stone-200 text-stone-700 hover:border-green-400'
-                        }`}
-                      >
-                        {d.name}
-                      </button>
-                      {/* Duplicate day */}
-                      <button
-                        onClick={() => duplicateDay(i)}
-                        className="ml-0.5 w-6 h-6 rounded-lg text-stone-400 hover:text-green-600 hover:bg-green-50 flex items-center justify-center transition-colors"
-                        title="Duplicate day"
-                      >
-                        <IconCopy size={12} />
-                      </button>
-                      {program.days.length > 1 && (
+                {/* Week-by-week structure */}
+                <div className="space-y-4 mb-6">
+                  {program.weekBlocks.map((w, wi) => (
+                    <div key={w.id} className="bg-white rounded-2xl border border-stone-200 overflow-hidden">
+                      {/* Week header */}
+                      <div className="flex items-center gap-3 px-4 py-3 bg-stone-50 border-b border-stone-200">
+                        <input
+                          value={w.name}
+                          onChange={e => setProgram(p => ({
+                            ...p,
+                            weekBlocks: p.weekBlocks.map((wb, i) => i === wi ? { ...wb, name: e.target.value } : wb),
+                          }))}
+                          className="flex-1 text-sm font-semibold text-stone-900 bg-transparent focus:outline-none border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
+                        />
+                        <span className="text-[10px] text-stone-400 shrink-0">{w.days.length} day{w.days.length !== 1 ? 's' : ''}</span>
                         <button
-                          onClick={() => removeDay(i)}
-                          className="w-5 h-5 rounded-full text-stone-400 hover:text-red-500 text-xs flex items-center justify-center transition-colors"
-                          title="Remove day"
-                        >×</button>
-                      )}
+                          onClick={() => duplicateWeek(wi)}
+                          className="w-6 h-6 rounded-lg text-stone-400 hover:text-green-600 hover:bg-green-50 flex items-center justify-center transition-colors"
+                          title="Duplicate week"
+                        >
+                          <IconCopy size={12} />
+                        </button>
+                        {program.weekBlocks.length > 1 && (
+                          <button
+                            onClick={() => removeWeek(wi)}
+                            className="w-6 h-6 rounded-lg text-stone-400 hover:text-red-500 hover:bg-red-50 flex items-center justify-center transition-colors text-sm"
+                            title="Remove week"
+                          >×</button>
+                        )}
+                      </div>
+
+                      {/* Day tabs for this week */}
+                      <div className="flex items-center gap-2 px-4 py-3 overflow-x-auto">
+                        {w.days.map((d, di) => (
+                          <div key={d.id} className="flex items-center shrink-0 gap-0.5">
+                            <button
+                              onClick={() => { setActiveWeek(wi); setActiveDay(di); }}
+                              className={`px-3.5 py-1.5 rounded-lg text-sm font-medium transition-all ${
+                                activeWeek === wi && activeDay === di
+                                  ? 'bg-green-600 text-white shadow-sm'
+                                  : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                              }`}
+                            >
+                              {d.name}
+                            </button>
+                            <button
+                              onClick={() => duplicateDay(wi, di)}
+                              className="w-5 h-5 rounded text-stone-400 hover:text-green-600 hover:bg-green-50 flex items-center justify-center transition-colors"
+                              title="Duplicate day"
+                            >
+                              <IconCopy size={11} />
+                            </button>
+                            {w.days.length > 1 && (
+                              <button
+                                onClick={() => removeDay(wi, di)}
+                                className="w-5 h-5 rounded text-stone-400 hover:text-red-500 text-xs flex items-center justify-center transition-colors"
+                              >×</button>
+                            )}
+                          </div>
+                        ))}
+                        <button
+                          onClick={() => addDay(wi)}
+                          className="shrink-0 px-3 py-1.5 rounded-lg text-xs text-stone-500 border border-dashed border-stone-300 hover:border-green-400 hover:text-green-600 transition-all"
+                        >+ Day</button>
+                      </div>
                     </div>
                   ))}
+
+                  {/* Add week */}
                   <button
-                    onClick={addDay}
-                    className="shrink-0 px-3 py-2 rounded-xl text-sm text-stone-500 border border-dashed border-stone-300 hover:border-green-400 hover:text-green-600 transition-all"
-                  >+ Day</button>
+                    onClick={addWeek}
+                    className="w-full py-3 rounded-2xl border border-dashed border-stone-300 text-sm text-stone-500 hover:border-green-400 hover:text-green-600 transition-all"
+                  >
+                    + Add Week
+                  </button>
                 </div>
 
-                {/* Day name + actions */}
+                {/* Active day editor */}
                 <div className="flex items-center gap-3 mb-4">
-                  <input
-                    value={day.name}
-                    onChange={e => updateDay({ ...day, name: e.target.value })}
-                    placeholder="Day name (e.g. Push / Upper / Leg Day)"
-                    className="flex-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
-                  />
+                  <div className="flex-1">
+                    <span className="text-[10px] text-stone-400 uppercase tracking-widest font-medium">{week?.name} · </span>
+                    <input
+                      value={day?.name ?? ''}
+                      onChange={e => updateDay({ ...day, name: e.target.value })}
+                      placeholder="Day name (e.g. Push / Upper / Leg Day)"
+                      className="text-sm font-semibold text-stone-900 bg-transparent focus:outline-none border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
+                    />
+                  </div>
                   <button
                     onClick={clearDay}
-                    className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 text-sm rounded-xl hover:bg-stone-50 hover:border-stone-300 transition-all"
+                    className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 text-sm rounded-xl hover:bg-stone-50 transition-all"
                   >
                     Clear day
                   </button>
@@ -993,8 +1085,9 @@ export default function PTDashboard() {
               <div className="space-y-3">
                 {programs.map(prog => {
                   const client = clients.find(c => c.id === prog.clientId);
-                  const totalExercises = prog.days.reduce((s, d) => s + d.exercises.filter(e => e.name.trim()).length, 0);
-                  const totalSets = prog.days.reduce((s, d) => s + d.exercises.reduce((ss, e) => ss + e.setRows.length, 0), 0);
+                  const allDays = prog.weekBlocks.flatMap(w => w.days);
+                  const totalExercises = allDays.reduce((s, d) => s + d.exercises.filter(e => e.name.trim()).length, 0);
+                  const totalSets = allDays.reduce((s, d) => s + d.exercises.reduce((ss, e) => ss + e.setRows.length, 0), 0);
                   return (
                     <div key={prog.id} className="bg-white rounded-2xl border border-stone-200 p-5 hover:border-green-300 transition-all">
                       <div className="flex items-start gap-4">
@@ -1018,7 +1111,7 @@ export default function PTDashboard() {
                                 Duplicate
                               </button>
                               <button
-                                onClick={() => { setProgram(prog); setActiveDay(0); setSaveState('idle'); setView('builder'); }}
+                                onClick={() => { setProgram(prog); setActiveWeek(0); setActiveDay(0); setSaveState('idle'); setView('builder'); }}
                                 className="px-3 py-1.5 text-xs border border-stone-200 rounded-lg text-stone-600 bg-white hover:border-green-400 hover:text-green-700 transition-all"
                               >
                                 Edit
@@ -1034,8 +1127,8 @@ export default function PTDashboard() {
                           </div>
                           {/* Stats row */}
                           <div className="flex items-center gap-4 mt-3">
-                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{prog.weeks} weeks</span>
-                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{prog.days.length} day{prog.days.length !== 1 ? 's' : ''}</span>
+                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{prog.weekBlocks.length} week{prog.weekBlocks.length !== 1 ? 's' : ''}</span>
+                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{allDays.length} day{allDays.length !== 1 ? 's' : ''}</span>
                             <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{totalExercises} exercise{totalExercises !== 1 ? 's' : ''}</span>
                             <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{totalSets} sets</span>
                           </div>
