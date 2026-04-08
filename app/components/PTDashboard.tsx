@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -10,19 +10,30 @@ type Client = {
   id: string;
   name: string;
   goal: string;
-  sessions: number;
+  email: string;
+  phone: string;
+  sessionsPerWeek: number;
+  totalSessions: number;
   nextSession: string;
   status: 'active' | 'inactive';
+  notes: string;
   avatar: string;
+};
+
+type SetType = 'working' | 'warmup' | 'dropset' | 'failure';
+
+type SetRow = {
+  id: string;
+  type: SetType;
+  reps: string;
+  weight: string;
+  rpe: string;
 };
 
 type Exercise = {
   id: string;
   name: string;
-  sets: string;
-  reps: string;
-  weight: string;
-  rpe: string;
+  setRows: SetRow[];
   tempo: string;
   notes: string;
 };
@@ -43,7 +54,33 @@ type Program = {
   notes: string;
 };
 
-// ─── Exercise Library ─────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const LS_CLIENTS_KEY = 'apex_pt_clients';
+const LS_PROGRAMS_KEY = 'apex_pt_programs';
+
+const SET_TYPE_LABELS: Record<SetType, string> = {
+  working: 'W',
+  warmup: 'WU',
+  dropset: 'D',
+  failure: 'F',
+};
+
+const SET_TYPE_TITLES: Record<SetType, string> = {
+  working: 'Working set',
+  warmup: 'Warm-up set',
+  dropset: 'Drop set',
+  failure: 'Failure set',
+};
+
+const SET_TYPE_COLORS: Record<SetType, string> = {
+  working:  'bg-stone-100 text-stone-600 hover:bg-stone-200',
+  warmup:   'bg-blue-50 text-blue-600 hover:bg-blue-100',
+  dropset:  'bg-purple-50 text-purple-600 hover:bg-purple-100',
+  failure:  'bg-red-50 text-red-500 hover:bg-red-100',
+};
+
+const SET_TYPE_CYCLE: SetType[] = ['working', 'warmup', 'dropset', 'failure'];
 
 const EXERCISE_LIBRARY: Record<string, string[]> = {
   Chest: ['Bench Press', 'Incline Bench Press', 'Decline Bench Press', 'Dumbbell Fly', 'Cable Crossover', 'Push Up'],
@@ -54,17 +91,38 @@ const EXERCISE_LIBRARY: Record<string, string[]> = {
   Core: ['Plank', 'Cable Crunch', 'Hanging Leg Raise', 'Ab Wheel', 'Russian Twist', 'Dead Bug'],
 };
 
+function makeAvatar(name: string): string {
+  const parts = name.trim().split(/\s+/);
+  if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
 const DEMO_CLIENTS: Client[] = [
-  { id: 'c1', name: 'Sarah Mitchell', goal: 'Fat loss + toning', sessions: 24, nextSession: 'Mon 9am', status: 'active', avatar: 'SM' },
-  { id: 'c2', name: 'James Okafor', goal: 'Muscle gain', sessions: 12, nextSession: 'Tue 6pm', status: 'active', avatar: 'JO' },
-  { id: 'c3', name: 'Priya Sharma', goal: 'General fitness', sessions: 8, nextSession: 'Wed 7am', status: 'active', avatar: 'PS' },
-  { id: 'c4', name: 'Tom Bradley', goal: 'Powerlifting prep', sessions: 36, nextSession: 'Thu 5pm', status: 'active', avatar: 'TB' },
-  { id: 'c5', name: 'Emma Walsh', goal: 'Post-natal rehab', sessions: 6, nextSession: '—', status: 'inactive', avatar: 'EW' },
+  { id: 'c1', name: 'Sarah Mitchell', goal: 'Fat loss + toning', email: 'sarah@example.com', phone: '', sessionsPerWeek: 3, totalSessions: 24, nextSession: 'Mon 9am', status: 'active', notes: '', avatar: 'SM' },
+  { id: 'c2', name: 'James Okafor',   goal: 'Muscle gain',       email: 'james@example.com',  phone: '', sessionsPerWeek: 3, totalSessions: 12, nextSession: 'Tue 6pm', status: 'active', notes: '', avatar: 'JO' },
+  { id: 'c3', name: 'Priya Sharma',   goal: 'General fitness',   email: 'priya@example.com',  phone: '', sessionsPerWeek: 2, totalSessions: 8,  nextSession: 'Wed 7am', status: 'active', notes: '', avatar: 'PS' },
+  { id: 'c4', name: 'Tom Bradley',    goal: 'Powerlifting prep', email: 'tom@example.com',    phone: '', sessionsPerWeek: 4, totalSessions: 36, nextSession: 'Thu 5pm', status: 'active', notes: '', avatar: 'TB' },
+  { id: 'c5', name: 'Emma Walsh',     goal: 'Post-natal rehab',  email: 'emma@example.com',   phone: '', sessionsPerWeek: 2, totalSessions: 6,  nextSession: '—',       status: 'inactive', notes: '', avatar: 'EW' },
 ];
+
+function blankClient(): Omit<Client, 'id' | 'avatar'> {
+  return { name: '', goal: '', email: '', phone: '', sessionsPerWeek: 2, totalSessions: 0, nextSession: '—', status: 'active', notes: '' };
+}
+
+const newSetRow = (type: SetType = 'working'): SetRow => ({
+  id: `set-${Date.now()}-${Math.random()}`,
+  type,
+  reps: '',
+  weight: '',
+  rpe: '',
+});
 
 const newExercise = (): Exercise => ({
   id: `ex-${Date.now()}-${Math.random()}`,
-  name: '', sets: '3', reps: '10', weight: '', rpe: '', tempo: '', notes: '',
+  name: '',
+  setRows: [newSetRow(), newSetRow(), newSetRow()],
+  tempo: '',
+  notes: '',
 });
 
 const newDay = (n: number): WorkoutDay => ({
@@ -73,7 +131,70 @@ const newDay = (n: number): WorkoutDay => ({
   exercises: [newExercise()],
 });
 
-// ─── Sidebar ──────────────────────────────────────────────────────────────────
+function blankProgram(): Program {
+  return {
+    id: `prog-${Date.now()}`,
+    name: '',
+    clientId: '',
+    weeks: 4,
+    days: [newDay(1)],
+    createdAt: new Date().toISOString(),
+    notes: '',
+  };
+}
+
+// ─── SVG Icons ────────────────────────────────────────────────────────────────
+
+function IconChevronLeft({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="10 4 6 8 10 12" />
+    </svg>
+  );
+}
+
+function IconChevronRight({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="6 4 10 8 6 12" />
+    </svg>
+  );
+}
+
+function IconCheck({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="3 8 6.5 12 13 4" />
+    </svg>
+  );
+}
+
+function IconCopy({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <rect x="5" y="5" width="9" height="9" rx="1.5"/>
+      <path d="M11 5V3.5A1.5 1.5 0 0 0 9.5 2h-7A1.5 1.5 0 0 0 1 3.5v7A1.5 1.5 0 0 0 2.5 12H4"/>
+    </svg>
+  );
+}
+
+function IconTrash({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="2 4 4 4 14 4"/><path d="M5 4V3a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v1"/><path d="M6 7v5M8 7v5M10 7v5"/><path d="M13 4l-.8 9.6A1.5 1.5 0 0 1 10.7 15H5.3a1.5 1.5 0 0 1-1.5-1.4L3 4"/>
+    </svg>
+  );
+}
+
+function IconEdit({ size = 14 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M11.5 2.5a2.12 2.12 0 0 1 3 3L5 15H1v-4L11.5 2.5z"/>
+    </svg>
+  );
+}
+
+// ─── Nav ──────────────────────────────────────────────────────────────────────
 
 const NAV_ICONS: Record<View, React.ReactNode> = {
   builder: (
@@ -113,37 +234,262 @@ const NAV: { id: View; label: string }[] = [
   { id: 'settings', label: 'Settings' },
 ];
 
+// ─── Client Form Modal ────────────────────────────────────────────────────────
+
+type ClientFormProps = {
+  initial?: Client;
+  onSave: (c: Client) => void;
+  onCancel: () => void;
+};
+
+function ClientForm({ initial, onSave, onCancel }: ClientFormProps) {
+  const [form, setForm] = useState<Omit<Client, 'id' | 'avatar'>>(
+    initial
+      ? { name: initial.name, goal: initial.goal, email: initial.email, phone: initial.phone, sessionsPerWeek: initial.sessionsPerWeek, totalSessions: initial.totalSessions, nextSession: initial.nextSession, status: initial.status, notes: initial.notes }
+      : blankClient()
+  );
+
+  const set = (field: keyof typeof form, value: string | number) =>
+    setForm(f => ({ ...f, [field]: value }));
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!form.name.trim()) return;
+    const id = initial?.id ?? `c-${Date.now()}`;
+    const avatar = makeAvatar(form.name);
+    onSave({ ...form, id, avatar });
+  };
+
+  return (
+    <div className="fixed inset-0 bg-black/30 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-2xl border border-stone-200 shadow-xl w-full max-w-lg">
+        <div className="px-6 py-5 border-b border-stone-200">
+          <h2 className="text-lg font-bold text-stone-900">{initial ? 'Edit Client' : 'Add Client'}</h2>
+        </div>
+        <form onSubmit={handleSubmit} className="px-6 py-5 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="col-span-2">
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Full Name *</label>
+              <input
+                required
+                value={form.name}
+                onChange={e => set('name', e.target.value)}
+                placeholder="e.g. Sarah Mitchell"
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Goal</label>
+              <input
+                value={form.goal}
+                onChange={e => set('goal', e.target.value)}
+                placeholder="e.g. Fat loss + toning"
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Email</label>
+              <input
+                type="email"
+                value={form.email}
+                onChange={e => set('email', e.target.value)}
+                placeholder="client@email.com"
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Phone</label>
+              <input
+                value={form.phone}
+                onChange={e => set('phone', e.target.value)}
+                placeholder="+61 400 000 000"
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Sessions / Week</label>
+              <input
+                type="number"
+                min={1}
+                max={14}
+                value={form.sessionsPerWeek}
+                onChange={e => set('sessionsPerWeek', parseInt(e.target.value) || 1)}
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 [appearance:textfield]"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Status</label>
+              <select
+                value={form.status}
+                onChange={e => set('status', e.target.value)}
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 bg-white"
+              >
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+              </select>
+            </div>
+            <div className="col-span-2">
+              <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Notes</label>
+              <textarea
+                value={form.notes}
+                onChange={e => set('notes', e.target.value)}
+                placeholder="Injury history, preferences, context..."
+                rows={2}
+                className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400 resize-none"
+              />
+            </div>
+          </div>
+          <div className="flex gap-3 pt-1">
+            <button
+              type="button"
+              onClick={onCancel}
+              className="flex-1 py-2.5 bg-white border border-stone-200 text-stone-900 text-sm font-semibold rounded-xl hover:bg-stone-50 transition-all"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="flex-1 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all"
+            >
+              {initial ? 'Save Changes' : 'Add Client'}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function PTDashboard() {
   const [view, setView] = useState<View>('builder');
   const [sidebarOpen, setSidebarOpen] = useState(true);
 
-  // Builder state
-  const [program, setProgram] = useState<Program>({
-    id: `prog-${Date.now()}`,
-    name: '',
-    clientId: '',
-    weeks: 4,
-    days: [newDay(1)],
-    createdAt: new Date().toISOString(),
-    notes: '',
-  });
-  const [activeDay, setActiveDay] = useState(0);
+  // ── Clients state ──
+  const [clients, setClients] = useState<Client[]>([]);
+  const [clientsLoaded, setClientsLoaded] = useState(false);
+  const [showClientForm, setShowClientForm] = useState(false);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+
+  // Load clients from localStorage on mount
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_CLIENTS_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as Client[];
+        setClients(parsed.length > 0 ? parsed : DEMO_CLIENTS);
+      } else {
+        setClients(DEMO_CLIENTS);
+      }
+    } catch {
+      setClients(DEMO_CLIENTS);
+    }
+    setClientsLoaded(true);
+  }, []);
+
+  // Persist clients to localStorage whenever they change
+  useEffect(() => {
+    if (!clientsLoaded) return;
+    localStorage.setItem(LS_CLIENTS_KEY, JSON.stringify(clients));
+  }, [clients, clientsLoaded]);
+
+  const saveClient = useCallback((c: Client) => {
+    setClients(prev => {
+      const existing = prev.find(x => x.id === c.id);
+      return existing ? prev.map(x => x.id === c.id ? c : x) : [c, ...prev];
+    });
+    setShowClientForm(false);
+    setEditingClient(null);
+  }, []);
+
+  const deleteClient = useCallback((id: string) => {
+    if (!window.confirm('Delete this client? This action cannot be undone.')) return;
+    setClients(prev => prev.filter(c => c.id !== id));
+  }, []);
+
+  // ── Programs state ──
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [programsLoaded, setProgramsLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(LS_PROGRAMS_KEY);
+      if (raw) setPrograms(JSON.parse(raw) as Program[]);
+    } catch { /* ignore */ }
+    setProgramsLoaded(true);
+  }, []);
+
+  useEffect(() => {
+    if (!programsLoaded) return;
+    localStorage.setItem(LS_PROGRAMS_KEY, JSON.stringify(programs));
+  }, [programs, programsLoaded]);
+
+  // ── Builder state ──
+  const [program, setProgram] = useState<Program>(blankProgram());
+  const [activeDay, setActiveDay] = useState(0);
   const [showLibrary, setShowLibrary] = useState(false);
   const [libraryTarget, setLibraryTarget] = useState<string | null>(null);
   const [expandedMuscle, setExpandedMuscle] = useState<string | null>(null);
-  const [savedMsg, setSavedMsg] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
 
-  const day = program.days[activeDay];
+  const day = program.days[activeDay] ?? program.days[0];
 
   const updateDay = (updated: WorkoutDay) => {
     setProgram(p => ({ ...p, days: p.days.map((d, i) => i === activeDay ? updated : d) }));
   };
 
-  const updateExercise = (exId: string, field: keyof Exercise, value: string) => {
+  const updateExercise = (exId: string, field: 'name' | 'tempo' | 'notes', value: string) => {
     updateDay({ ...day, exercises: day.exercises.map(e => e.id === exId ? { ...e, [field]: value } : e) });
+  };
+
+  const updateSetRow = (exId: string, setId: string, field: 'reps' | 'weight' | 'rpe', value: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId
+          ? { ...e, setRows: e.setRows.map(s => s.id === setId ? { ...s, [field]: value } : s) }
+          : e
+      ),
+    });
+  };
+
+  const cycleSetType = (exId: string, setId: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId
+          ? {
+              ...e,
+              setRows: e.setRows.map(s => {
+                if (s.id !== setId) return s;
+                const next = SET_TYPE_CYCLE[(SET_TYPE_CYCLE.indexOf(s.type) + 1) % SET_TYPE_CYCLE.length];
+                return { ...s, type: next };
+              }),
+            }
+          : e
+      ),
+    });
+  };
+
+  const addSetRow = (exId: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId ? { ...e, setRows: [...e.setRows, newSetRow()] } : e
+      ),
+    });
+  };
+
+  const removeSetRow = (exId: string, setId: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId && e.setRows.length > 1
+          ? { ...e, setRows: e.setRows.filter(s => s.id !== setId) }
+          : e
+      ),
+    });
   };
 
   const addExercise = () => updateDay({ ...day, exercises: [...day.exercises, newExercise()] });
@@ -153,10 +499,29 @@ export default function PTDashboard() {
     updateDay({ ...day, exercises: day.exercises.filter(e => e.id !== exId) });
   };
 
+  const clearDay = () => {
+    updateDay({ ...day, exercises: [newExercise()] });
+  };
+
   const addDay = () => {
     const next = newDay(program.days.length + 1);
     setProgram(p => ({ ...p, days: [...p.days, next] }));
     setActiveDay(program.days.length);
+  };
+
+  const duplicateDay = (i: number) => {
+    const source = program.days[i];
+    const copy: WorkoutDay = {
+      id: `day-${Date.now()}-${Math.random()}`,
+      name: `${source.name} (copy)`,
+      exercises: source.exercises.map(e => ({ ...e, id: `ex-${Date.now()}-${Math.random()}` })),
+    };
+    setProgram(p => {
+      const days = [...p.days];
+      days.splice(i + 1, 0, copy);
+      return { ...p, days };
+    });
+    setActiveDay(i + 1);
   };
 
   const removeDay = (i: number) => {
@@ -167,10 +532,17 @@ export default function PTDashboard() {
 
   const handleSaveProgram = () => {
     if (!program.name.trim()) return;
-    const updated = [{ ...program, id: `prog-${Date.now()}` }, ...programs];
-    setPrograms(updated);
-    setSavedMsg(true);
-    setTimeout(() => setSavedMsg(false), 2000);
+    const saved = { ...program, id: `prog-${Date.now()}` };
+    setPrograms(prev => [saved, ...prev]);
+    setSaveState('saved');
+    setTimeout(() => setSaveState('idle'), 2000);
+  };
+
+  const startNewProgram = () => {
+    setProgram(blankProgram());
+    setActiveDay(0);
+    setSaveState('idle');
+    setShowLibrary(false);
   };
 
   const insertFromLibrary = (exName: string) => {
@@ -181,10 +553,49 @@ export default function PTDashboard() {
     }
     setShowLibrary(false);
     setLibraryTarget(null);
+    setExpandedMuscle(null);
   };
+
+  const duplicateProgram = (prog: Program) => {
+    const copy: Program = {
+      ...prog,
+      id: `prog-${Date.now()}`,
+      name: `${prog.name} (copy)`,
+      createdAt: new Date().toISOString(),
+      days: prog.days.map(d => ({
+        ...d,
+        id: `day-${Date.now()}-${Math.random()}`,
+        exercises: d.exercises.map(e => ({ ...e, id: `ex-${Date.now()}-${Math.random()}` })),
+      })),
+    };
+    setPrograms(prev => [copy, ...prev]);
+  };
+
+  const deleteProgram = (id: string) => {
+    if (!window.confirm('Delete this program? This action cannot be undone.')) return;
+    setPrograms(prev => prev.filter(p => p.id !== id));
+  };
+
+  const openBuilderWithClient = (clientId: string) => {
+    setProgram(p => ({ ...p, clientId }));
+    setSaveState('idle');
+    setView('builder');
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex h-screen bg-stone-100 overflow-hidden">
+
+      {/* ── Client form modal ── */}
+      {(showClientForm || editingClient) && (
+        <ClientForm
+          initial={editingClient ?? undefined}
+          onSave={saveClient}
+          onCancel={() => { setShowClientForm(false); setEditingClient(null); }}
+        />
+      )}
+
 
       {/* ── Sidebar ── */}
       <aside className={`${sidebarOpen ? 'w-56' : 'w-16'} flex-shrink-0 bg-white border-r border-stone-200 flex flex-col transition-all duration-200`}>
@@ -215,9 +626,10 @@ export default function PTDashboard() {
         {/* Collapse toggle */}
         <button
           onClick={() => setSidebarOpen(o => !o)}
-          className="m-3 p-2 rounded-xl text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-all text-xs"
+          className="m-3 p-2 rounded-xl text-stone-500 hover:bg-stone-100 hover:text-stone-900 transition-all flex items-center justify-center"
+          title={sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}
         >
-          {sidebarOpen ? '← Collapse' : '→'}
+          {sidebarOpen ? <IconChevronLeft /> : <IconChevronRight />}
         </button>
       </aside>
 
@@ -227,215 +639,317 @@ export default function PTDashboard() {
         {/* ══ WORKOUT BUILDER ══ */}
         {view === 'builder' && (
           <div className="max-w-5xl mx-auto px-6 py-8">
-            <div className="flex items-center justify-between mb-8">
-              <div>
-                <h1 className="text-2xl font-bold text-stone-900">Workout Builder</h1>
-                <p className="text-sm text-stone-600 mt-0.5">Build and assign training programs to clients</p>
-              </div>
-              <button
-                onClick={handleSaveProgram}
-                disabled={!program.name.trim()}
-                className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
-              >
-                {savedMsg ? '✓ Saved' : 'Save Program'}
-              </button>
-            </div>
 
-            {/* Program meta */}
-            <div className="bg-white rounded-2xl border border-stone-200 p-5 mb-5">
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="md:col-span-1">
-                  <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Program Name</label>
-                  <input
-                    value={program.name}
-                    onChange={e => setProgram(p => ({ ...p, name: e.target.value }))}
-                    placeholder="e.g. 8 Week Strength Block"
-                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
-                  />
+            {/* ── Save success state ── */}
+            {saveState === 'saved' ? (
+              <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
+                <div className="w-12 h-12 rounded-full bg-green-100 flex items-center justify-center mx-auto mb-4 text-green-600">
+                  <IconCheck size={24} />
                 </div>
-                <div>
-                  <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Assign to Client</label>
-                  <select
-                    value={program.clientId}
-                    onChange={e => setProgram(p => ({ ...p, clientId: e.target.value }))}
-                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 bg-white"
-                  >
-                    <option value="">— No client —</option>
-                    {DEMO_CLIENTS.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Duration (weeks)</label>
-                  <input
-                    type="number"
-                    value={program.weeks}
-                    onChange={e => setProgram(p => ({ ...p, weeks: parseInt(e.target.value) || 1 }))}
-                    min={1} max={52}
-                    className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 [appearance:textfield]"
-                  />
-                </div>
-              </div>
-              <div className="mt-3">
-                <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Program Notes</label>
-                <textarea
-                  value={program.notes}
-                  onChange={e => setProgram(p => ({ ...p, notes: e.target.value }))}
-                  placeholder="Goals, periodisation notes, client context..."
-                  rows={2}
-                  className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400 resize-none"
-                />
-              </div>
-            </div>
-
-            {/* Day tabs */}
-            <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
-              {program.days.map((d, i) => (
-                <div key={d.id} className="flex items-center shrink-0">
+                <h2 className="text-xl font-bold text-stone-900 mb-1">Program saved</h2>
+                <p className="text-stone-500 text-sm mb-8">&ldquo;{program.name}&rdquo; has been added to your library</p>
+                <div className="flex items-center justify-center gap-3">
                   <button
-                    onClick={() => setActiveDay(i)}
-                    className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-                      activeDay === i
-                        ? 'bg-green-600 text-white shadow-sm'
-                        : 'bg-white border border-stone-200 text-stone-700 hover:border-green-400'
-                    }`}
+                    onClick={startNewProgram}
+                    className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all shadow-sm"
                   >
-                    {d.name}
+                    Build another
                   </button>
-                  {program.days.length > 1 && (
-                    <button
-                      onClick={() => removeDay(i)}
-                      className="ml-1 w-4 h-4 rounded-full text-stone-400 hover:text-red-500 text-xs flex items-center justify-center transition-colors"
-                    >×</button>
-                  )}
+                  <button
+                    onClick={() => setView('programs')}
+                    className="px-5 py-2.5 bg-white border border-stone-200 text-stone-900 text-sm font-semibold rounded-xl hover:bg-stone-50 transition-all"
+                  >
+                    View Programs
+                  </button>
                 </div>
-              ))}
-              <button
-                onClick={addDay}
-                className="shrink-0 px-3 py-2 rounded-xl text-sm text-stone-500 border border-dashed border-stone-300 hover:border-green-400 hover:text-green-600 transition-all"
-              >+ Day</button>
-            </div>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h1 className="text-2xl font-bold text-stone-900">Workout Builder</h1>
+                    <p className="text-sm text-stone-600 mt-0.5">Build and assign training programs to clients</p>
+                  </div>
+                  <button
+                    onClick={handleSaveProgram}
+                    disabled={!program.name.trim()}
+                    className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-sm"
+                  >
+                    Save Program
+                  </button>
+                </div>
 
-            {/* Day name */}
-            <div className="flex items-center gap-3 mb-4">
-              <input
-                value={day.name}
-                onChange={e => updateDay({ ...day, name: e.target.value })}
-                placeholder="Day name (e.g. Push / Upper / Leg Day)"
-                className="flex-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
-              />
-              <button
-                onClick={() => { setLibraryTarget(null); setShowLibrary(s => !s); }}
-                className="px-4 py-2.5 bg-stone-100 border border-stone-200 text-stone-700 text-sm rounded-xl hover:bg-stone-200 transition-all"
-              >
-                {showLibrary ? 'Close Library' : 'Exercise Library'}
-              </button>
-            </div>
-
-            {/* Exercise library panel */}
-            {showLibrary && (
-              <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
-                <p className="text-xs font-semibold text-stone-700 uppercase tracking-widest mb-3">Exercise Library</p>
-                <div className="space-y-2">
-                  {Object.entries(EXERCISE_LIBRARY).map(([muscle, exs]) => (
-                    <div key={muscle}>
-                      <button
-                        onClick={() => setExpandedMuscle(expandedMuscle === muscle ? null : muscle)}
-                        className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-stone-50 hover:bg-stone-100 transition-all text-sm font-medium text-stone-700"
+                {/* Program meta */}
+                <div className="bg-white rounded-2xl border border-stone-200 p-5 mb-5">
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="md:col-span-1">
+                      <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Program Name</label>
+                      <input
+                        value={program.name}
+                        onChange={e => setProgram(p => ({ ...p, name: e.target.value }))}
+                        placeholder="e.g. 8 Week Strength Block"
+                        className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Assign to Client</label>
+                      <select
+                        value={program.clientId}
+                        onChange={e => setProgram(p => ({ ...p, clientId: e.target.value }))}
+                        className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 bg-white"
                       >
-                        <span>{muscle}</span>
-                        <span className="text-stone-400">{expandedMuscle === muscle ? '▲' : '▼'}</span>
+                        <option value="">— No client —</option>
+                        {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Duration (weeks)</label>
+                      <input
+                        type="number"
+                        value={program.weeks}
+                        onChange={e => setProgram(p => ({ ...p, weeks: parseInt(e.target.value) || 1 }))}
+                        min={1} max={52}
+                        className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 [appearance:textfield]"
+                      />
+                    </div>
+                  </div>
+                  <div className="mt-3">
+                    <label className="text-[10px] text-stone-500 uppercase tracking-widest font-medium mb-1.5 block">Program Notes</label>
+                    <textarea
+                      value={program.notes}
+                      onChange={e => setProgram(p => ({ ...p, notes: e.target.value }))}
+                      placeholder="Goals, periodisation notes, client context..."
+                      rows={2}
+                      className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400 resize-none"
+                    />
+                  </div>
+                </div>
+
+                {/* Day tabs */}
+                <div className="flex items-center gap-2 mb-4 overflow-x-auto pb-1">
+                  {program.days.map((d, i) => (
+                    <div key={d.id} className="flex items-center shrink-0 gap-0.5">
+                      <button
+                        onClick={() => setActiveDay(i)}
+                        className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                          activeDay === i
+                            ? 'bg-green-600 text-white shadow-sm'
+                            : 'bg-white border border-stone-200 text-stone-700 hover:border-green-400'
+                        }`}
+                      >
+                        {d.name}
                       </button>
-                      {expandedMuscle === muscle && (
-                        <div className="flex flex-wrap gap-1.5 mt-2 px-1">
-                          {exs.map(ex => (
-                            <button
-                              key={ex}
-                              onClick={() => insertFromLibrary(ex)}
-                              className="text-xs px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded-lg hover:border-green-400 hover:text-green-700 transition-all"
-                            >
-                              {ex}
-                            </button>
-                          ))}
-                        </div>
+                      {/* Duplicate day */}
+                      <button
+                        onClick={() => duplicateDay(i)}
+                        className="ml-0.5 w-6 h-6 rounded-lg text-stone-400 hover:text-green-600 hover:bg-green-50 flex items-center justify-center transition-colors"
+                        title="Duplicate day"
+                      >
+                        <IconCopy size={12} />
+                      </button>
+                      {program.days.length > 1 && (
+                        <button
+                          onClick={() => removeDay(i)}
+                          className="w-5 h-5 rounded-full text-stone-400 hover:text-red-500 text-xs flex items-center justify-center transition-colors"
+                          title="Remove day"
+                        >×</button>
                       )}
                     </div>
                   ))}
+                  <button
+                    onClick={addDay}
+                    className="shrink-0 px-3 py-2 rounded-xl text-sm text-stone-500 border border-dashed border-stone-300 hover:border-green-400 hover:text-green-600 transition-all"
+                  >+ Day</button>
                 </div>
-              </div>
-            )}
 
-            {/* Exercise table */}
-            <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mb-4">
-              {/* Table header */}
-              <div className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_2fr_2rem] gap-2 px-4 py-2.5 bg-stone-50 border-b border-stone-200 text-[10px] text-stone-500 uppercase tracking-widest font-medium">
-                <span>Exercise</span>
-                <span className="text-center">Sets</span>
-                <span className="text-center">Reps</span>
-                <span className="text-center">Weight</span>
-                <span className="text-center">RPE</span>
-                <span className="text-center">Tempo</span>
-                <span>Notes</span>
-                <span />
-              </div>
+                {/* Day name + actions */}
+                <div className="flex items-center gap-3 mb-4">
+                  <input
+                    value={day.name}
+                    onChange={e => updateDay({ ...day, name: e.target.value })}
+                    placeholder="Day name (e.g. Push / Upper / Leg Day)"
+                    className="flex-1 border border-stone-200 rounded-xl px-3 py-2.5 text-sm font-semibold text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+                  />
+                  <button
+                    onClick={clearDay}
+                    className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 text-sm rounded-xl hover:bg-stone-50 hover:border-stone-300 transition-all"
+                  >
+                    Clear day
+                  </button>
+                  <button
+                    onClick={() => { setLibraryTarget(null); setShowLibrary(s => !s); }}
+                    className="px-4 py-2.5 bg-white border border-stone-200 text-stone-700 text-sm rounded-xl hover:bg-stone-100 transition-all"
+                  >
+                    {showLibrary ? 'Close Library' : 'Exercise Library'}
+                  </button>
+                </div>
 
-              {/* Exercise rows */}
-              <div className="divide-y divide-stone-100">
-                {day.exercises.map((ex, ei) => (
-                  <div key={ex.id} className="grid grid-cols-[2fr_1fr_1fr_1fr_1fr_1fr_2fr_2rem] gap-2 px-4 py-3 items-center hover:bg-stone-50 transition-colors group">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs text-stone-400 tabular-nums w-4 shrink-0">{ei + 1}</span>
-                      <input
-                        value={ex.name}
-                        onChange={e => updateExercise(ex.id, 'name', e.target.value)}
-                        placeholder="Exercise name"
-                        className="flex-1 text-sm text-stone-900 font-medium focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
-                      />
-                      <button
-                        onClick={() => { setLibraryTarget(ex.id); setShowLibrary(true); }}
-                        className="text-stone-400 hover:text-green-600 text-xs opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                        title="Pick from library"
-                      >+</button>
+                {/* Exercise library panel */}
+                {showLibrary && (
+                  <div className="bg-white rounded-2xl border border-stone-200 p-4 mb-4">
+                    <p className="text-xs font-semibold text-stone-700 uppercase tracking-widest mb-3">Exercise Library</p>
+                    <div className="space-y-2">
+                      {Object.entries(EXERCISE_LIBRARY).map(([muscle, exs]) => (
+                        <div key={muscle}>
+                          <button
+                            onClick={() => setExpandedMuscle(expandedMuscle === muscle ? null : muscle)}
+                            className="w-full flex items-center justify-between px-3 py-2 rounded-xl bg-stone-50 hover:bg-stone-100 transition-all text-sm font-medium text-stone-700"
+                          >
+                            <span>{muscle}</span>
+                            <span className="text-stone-400">{expandedMuscle === muscle ? '▲' : '▼'}</span>
+                          </button>
+                          {expandedMuscle === muscle && (
+                            <div className="flex flex-wrap gap-1.5 mt-2 px-1">
+                              {exs.map(ex => (
+                                <button
+                                  key={ex}
+                                  onClick={() => insertFromLibrary(ex)}
+                                  className="text-xs px-3 py-1.5 bg-white border border-stone-200 text-stone-700 rounded-lg hover:border-green-400 hover:text-green-700 transition-all"
+                                >
+                                  {ex}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
-                    {(['sets','reps','weight','rpe','tempo'] as (keyof Exercise)[]).map(field => (
-                      <input
-                        key={field}
-                        value={ex[field]}
-                        onChange={e => updateExercise(ex.id, field, e.target.value)}
-                        placeholder={field === 'weight' ? 'kg' : field === 'rpe' ? '1–10' : field === 'tempo' ? '3-1-2' : '—'}
-                        className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
-                        type={['sets','reps','weight','rpe'].includes(field) ? 'number' : 'text'}
-                      />
-                    ))}
-                    <input
-                      value={ex.notes}
-                      onChange={e => updateExercise(ex.id, 'notes', e.target.value)}
-                      placeholder="Notes..."
-                      className="w-full text-sm text-stone-700 focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
-                    />
-                    <button
-                      onClick={() => removeExercise(ex.id)}
-                      disabled={day.exercises.length === 1}
-                      className="text-stone-300 hover:text-red-400 transition-colors disabled:opacity-0 text-sm"
-                    >✕</button>
                   </div>
-                ))}
-              </div>
+                )}
 
-              {/* Add exercise */}
-              <div className="px-4 py-3 border-t border-stone-100">
-                <button
-                  onClick={addExercise}
-                  className="text-sm text-stone-500 hover:text-green-600 transition-colors"
-                >
-                  + Add exercise
-                </button>
-              </div>
-            </div>
+                {/* Exercise table */}
+                <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mb-4">
+                  {/* Table header */}
+                  <div className="grid grid-cols-[1.75rem_1fr_7rem_1fr_1.5rem] gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-200 text-[10px] text-stone-500 uppercase tracking-widest font-medium">
+                    <span>#</span>
+                    <span>Exercise</span>
+                    <span>Tempo</span>
+                    <span>Notes</span>
+                    <span />
+                  </div>
 
-            {/* Day summary */}
-            <p className="text-xs text-stone-500 text-right">
-              {day.exercises.filter(e => e.name.trim()).length} exercise{day.exercises.filter(e => e.name.trim()).length !== 1 ? 's' : ''} · {day.exercises.reduce((sum, e) => sum + (parseInt(e.sets) || 0), 0)} total sets
-            </p>
+                  {/* Exercise rows */}
+                  <div className="divide-y divide-stone-100">
+                    {day.exercises.map((ex, ei) => (
+                      <div key={ex.id} className="group">
+                        {/* Exercise header */}
+                        <div className="grid grid-cols-[1.75rem_1fr_7rem_1fr_1.5rem] gap-3 px-4 pt-3 pb-2 items-start">
+                          <span className="w-5 h-5 rounded bg-stone-100 text-stone-500 text-[11px] font-semibold flex items-center justify-center mt-0.5 shrink-0">
+                            {ei + 1}
+                          </span>
+                          <div className="flex items-center gap-2">
+                            <input
+                              value={ex.name}
+                              onChange={e => updateExercise(ex.id, 'name', e.target.value)}
+                              placeholder="Exercise name"
+                              className="flex-1 text-sm text-stone-900 font-semibold focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
+                            />
+                            <button
+                              onClick={() => { setLibraryTarget(ex.id); setShowLibrary(true); }}
+                              className="text-stone-400 hover:text-green-600 text-xs opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                              title="Pick from library"
+                            >lib</button>
+                          </div>
+                          <input
+                            value={ex.tempo}
+                            onChange={e => updateExercise(ex.id, 'tempo', e.target.value)}
+                            placeholder="3-1-2"
+                            className="w-full text-sm text-stone-900 focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
+                          />
+                          <input
+                            value={ex.notes}
+                            onChange={e => updateExercise(ex.id, 'notes', e.target.value)}
+                            placeholder="Notes..."
+                            className="w-full text-sm text-stone-700 focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
+                          />
+                          <button
+                            onClick={() => removeExercise(ex.id)}
+                            disabled={day.exercises.length === 1}
+                            className="text-stone-300 hover:text-red-400 transition-colors disabled:opacity-0 mt-0.5"
+                          >
+                            <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+                              <line x1="2" y1="2" x2="10" y2="10"/><line x1="10" y1="2" x2="2" y2="10"/>
+                            </svg>
+                          </button>
+                        </div>
+
+                        {/* Set rows */}
+                        <div className="pl-11 pr-4 pb-3">
+                          {/* Set sub-header */}
+                          <div className="grid grid-cols-[3.5rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5">
+                            <span className="text-[9px] text-stone-400 uppercase tracking-widest">Type</span>
+                            <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Reps</span>
+                            <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Weight</span>
+                            <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">RPE</span>
+                            <span />
+                          </div>
+                          {ex.setRows.map((set) => (
+                            <div key={set.id} className="grid grid-cols-[3.5rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5 items-center group/set">
+                              <button
+                                onClick={() => cycleSetType(ex.id, set.id)}
+                                title={SET_TYPE_TITLES[set.type]}
+                                className={`text-[10px] font-bold px-2 py-1 rounded-md transition-all text-left ${SET_TYPE_COLORS[set.type]}`}
+                              >
+                                {SET_TYPE_LABELS[set.type]}
+                              </button>
+                              <input
+                                value={set.reps}
+                                onChange={e => updateSetRow(ex.id, set.id, 'reps', e.target.value)}
+                                placeholder="—"
+                                type="number"
+                                className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
+                              />
+                              <input
+                                value={set.weight}
+                                onChange={e => updateSetRow(ex.id, set.id, 'weight', e.target.value)}
+                                placeholder="kg"
+                                type="number"
+                                className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
+                              />
+                              <input
+                                value={set.rpe}
+                                onChange={e => updateSetRow(ex.id, set.id, 'rpe', e.target.value)}
+                                placeholder="—"
+                                type="number"
+                                min="1" max="10"
+                                className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
+                              />
+                              <button
+                                onClick={() => removeSetRow(ex.id, set.id)}
+                                disabled={ex.setRows.length === 1}
+                                className="text-stone-300 hover:text-red-400 transition-colors disabled:opacity-0 opacity-0 group-hover/set:opacity-100 flex items-center justify-center"
+                              >
+                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
+                                  <line x1="2" y1="6" x2="10" y2="6"/>
+                                </svg>
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            onClick={() => addSetRow(ex.id)}
+                            className="text-xs text-stone-400 hover:text-green-600 transition-colors mt-0.5"
+                          >
+                            + set
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Add exercise */}
+                  <div className="px-4 py-3 border-t border-stone-100">
+                    <button onClick={addExercise} className="text-sm text-stone-500 hover:text-green-600 transition-colors">
+                      + Add exercise
+                    </button>
+                  </div>
+                </div>
+
+                {/* Day summary */}
+                <p className="text-xs text-stone-500 text-right">
+                  {day.exercises.filter(e => e.name.trim()).length} exercise{day.exercises.filter(e => e.name.trim()).length !== 1 ? 's' : ''} · {day.exercises.reduce((sum, e) => sum + e.setRows.length, 0)} total sets
+                </p>
+              </>
+            )}
           </div>
         )}
 
@@ -447,7 +961,10 @@ export default function PTDashboard() {
                 <h1 className="text-2xl font-bold text-stone-900">Programs</h1>
                 <p className="text-sm text-stone-600 mt-0.5">All saved training programs</p>
               </div>
-              <button onClick={() => setView('builder')} className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all shadow-sm">
+              <button
+                onClick={() => { startNewProgram(); setView('builder'); }}
+                className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all shadow-sm"
+              >
                 + New Program
               </button>
             </div>
@@ -456,24 +973,64 @@ export default function PTDashboard() {
               <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
                 <p className="text-stone-700 font-medium mb-1">No programs yet</p>
                 <p className="text-stone-500 text-sm mb-5">Build your first program in the Workout Builder</p>
-                <button onClick={() => setView('builder')} className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all">
+                <button
+                  onClick={() => { startNewProgram(); setView('builder'); }}
+                  className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all"
+                >
                   Open Builder
                 </button>
               </div>
             ) : (
               <div className="space-y-3">
-                {programs.map(p => {
-                  const client = DEMO_CLIENTS.find(c => c.id === p.clientId);
+                {programs.map(prog => {
+                  const client = clients.find(c => c.id === prog.clientId);
+                  const totalExercises = prog.days.reduce((s, d) => s + d.exercises.filter(e => e.name.trim()).length, 0);
+                  const totalSets = prog.days.reduce((s, d) => s + d.exercises.reduce((ss, e) => ss + e.setRows.length, 0), 0);
                   return (
-                    <div key={p.id} className="bg-white rounded-2xl border border-stone-200 p-5 flex items-center justify-between hover:border-green-300 transition-all">
-                      <div>
-                        <h3 className="font-semibold text-stone-900">{p.name}</h3>
-                        <p className="text-sm text-stone-500 mt-0.5">
-                          {client ? client.name : 'Unassigned'} · {p.weeks} weeks · {p.days.length} days · {p.days.reduce((s, d) => s + d.exercises.filter(e => e.name.trim()).length, 0)} exercises
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => { setProgram(p); setActiveDay(0); setView('builder'); }} className="px-4 py-2 text-sm border border-stone-200 rounded-xl text-stone-700 hover:border-green-400 hover:text-green-700 transition-all">Edit</button>
+                    <div key={prog.id} className="bg-white rounded-2xl border border-stone-200 p-5 hover:border-green-300 transition-all">
+                      <div className="flex items-start gap-4">
+                        {/* Client avatar */}
+                        <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold text-sm flex items-center justify-center shrink-0">
+                          {client ? client.avatar : '—'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <h3 className="font-semibold text-stone-900">{prog.name}</h3>
+                              <p className="text-sm text-stone-500 mt-0.5">{client ? client.name : 'Unassigned'}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => duplicateProgram(prog)}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-xs border border-stone-200 rounded-lg text-stone-600 bg-white hover:border-green-400 hover:text-green-700 transition-all"
+                                title="Duplicate program"
+                              >
+                                <IconCopy size={12} />
+                                Duplicate
+                              </button>
+                              <button
+                                onClick={() => { setProgram(prog); setActiveDay(0); setSaveState('idle'); setView('builder'); }}
+                                className="px-3 py-1.5 text-xs border border-stone-200 rounded-lg text-stone-600 bg-white hover:border-green-400 hover:text-green-700 transition-all"
+                              >
+                                Edit
+                              </button>
+                              <button
+                                onClick={() => deleteProgram(prog.id)}
+                                className="flex items-center gap-1 px-3 py-1.5 text-xs border border-stone-200 rounded-lg text-stone-600 bg-white hover:border-red-300 hover:text-red-600 transition-all"
+                                title="Delete program"
+                              >
+                                <IconTrash size={12} />
+                              </button>
+                            </div>
+                          </div>
+                          {/* Stats row */}
+                          <div className="flex items-center gap-4 mt-3">
+                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{prog.weeks} weeks</span>
+                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{prog.days.length} day{prog.days.length !== 1 ? 's' : ''}</span>
+                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{totalExercises} exercise{totalExercises !== 1 ? 's' : ''}</span>
+                            <span className="text-xs text-stone-500 bg-stone-50 border border-stone-200 px-2.5 py-1 rounded-lg">{totalSets} sets</span>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   );
@@ -489,34 +1046,71 @@ export default function PTDashboard() {
             <div className="flex items-center justify-between mb-8">
               <div>
                 <h1 className="text-2xl font-bold text-stone-900">Clients</h1>
-                <p className="text-sm text-stone-600 mt-0.5">{DEMO_CLIENTS.filter(c => c.status === 'active').length} active clients</p>
+                <p className="text-sm text-stone-600 mt-0.5">{clients.filter(c => c.status === 'active').length} active client{clients.filter(c => c.status === 'active').length !== 1 ? 's' : ''}</p>
               </div>
-              <button className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all shadow-sm">+ Add Client</button>
+              <button
+                onClick={() => setShowClientForm(true)}
+                className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all shadow-sm"
+              >
+                + Add Client
+              </button>
             </div>
 
-            <div className="space-y-3">
-              {DEMO_CLIENTS.map(c => (
-                <div key={c.id} className="bg-white rounded-2xl border border-stone-200 p-5 flex items-center gap-4 hover:border-green-300 transition-all">
-                  <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold text-sm flex items-center justify-center shrink-0">{c.avatar}</div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-semibold text-stone-900">{c.name}</h3>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${c.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-stone-100 text-stone-500'}`}>
-                        {c.status}
-                      </span>
+            {clients.length === 0 ? (
+              <div className="bg-white rounded-2xl border border-stone-200 p-16 text-center">
+                <p className="text-stone-700 font-medium mb-1">No clients yet</p>
+                <p className="text-stone-500 text-sm mb-5">Add your first client to get started</p>
+                <button
+                  onClick={() => setShowClientForm(true)}
+                  className="px-5 py-2.5 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all"
+                >
+                  Add Client
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {clients.map(c => (
+                  <div key={c.id} className="bg-white rounded-2xl border border-stone-200 p-5 flex items-center gap-4 hover:border-green-300 transition-all">
+                    <div className="w-10 h-10 rounded-full bg-green-100 text-green-700 font-bold text-sm flex items-center justify-center shrink-0">{c.avatar}</div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-semibold text-stone-900">{c.name}</h3>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${c.status === 'active' ? 'bg-green-50 text-green-700' : 'bg-stone-100 text-stone-500'}`}>
+                          {c.status}
+                        </span>
+                      </div>
+                      <p className="text-sm text-stone-500 mt-0.5">{c.goal || '—'} · {c.totalSessions} sessions · {c.sessionsPerWeek}x/week</p>
                     </div>
-                    <p className="text-sm text-stone-500 mt-0.5">{c.goal} · {c.sessions} sessions</p>
+                    <div className="text-right shrink-0">
+                      <p className="text-xs text-stone-500">Next session</p>
+                      <p className="text-sm font-medium text-stone-700">{c.nextSession || '—'}</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        onClick={() => openBuilderWithClient(c.id)}
+                        className="px-3 py-1.5 text-xs bg-green-600 text-white rounded-lg hover:bg-green-500 transition-all font-medium"
+                      >
+                        Build Program
+                      </button>
+                      <button
+                        onClick={() => setEditingClient(c)}
+                        className="p-1.5 text-stone-400 border border-stone-200 rounded-lg hover:border-green-400 hover:text-green-600 bg-white transition-all"
+                        title="Edit client"
+                      >
+                        <IconEdit size={14} />
+                      </button>
+                      <button
+                        onClick={() => deleteClient(c.id)}
+                        className="p-1.5 text-stone-400 border border-stone-200 rounded-lg hover:border-red-300 hover:text-red-500 bg-white transition-all"
+                        title="Delete client"
+                      >
+                        <IconTrash size={14} />
+                      </button>
+                    </div>
                   </div>
-                  <div className="text-right shrink-0">
-                    <p className="text-xs text-stone-500">Next session</p>
-                    <p className="text-sm font-medium text-stone-700">{c.nextSession}</p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => { setProgram(p => ({ ...p, clientId: c.id })); setView('builder'); }} className="px-3 py-1.5 text-xs border border-stone-200 rounded-lg text-stone-600 hover:border-green-400 hover:text-green-700 transition-all">Build Program</button>
-                  </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 
