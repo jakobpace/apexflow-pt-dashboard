@@ -61,10 +61,10 @@ const LS_CLIENTS_KEY = 'apex_pt_clients';
 const LS_PROGRAMS_KEY = 'apex_pt_programs';
 
 const SET_TYPE_LABELS: Record<SetType, string> = {
-  working: 'W',
-  warmup: 'WU',
-  dropset: 'D',
-  failure: 'F',
+  working: 'Working',
+  warmup: 'Warm Up',
+  dropset: 'Drop Set',
+  failure: 'Failure',
 };
 
 const SET_TYPE_TITLES: Record<SetType, string> = {
@@ -885,7 +885,7 @@ export default function PTDashboard() {
                         {/* Set rows */}
                         <div className="pl-11 pr-4 pb-3">
                           {/* Set sub-header */}
-                          <div className="grid grid-cols-[3.5rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5">
+                          <div className="grid grid-cols-[6rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5">
                             <span className="text-[9px] text-stone-400 uppercase tracking-widest">Type</span>
                             <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Reps</span>
                             <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Weight</span>
@@ -893,7 +893,7 @@ export default function PTDashboard() {
                             <span />
                           </div>
                           {ex.setRows.map((set) => (
-                            <div key={set.id} className="grid grid-cols-[3.5rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5 items-center group/set">
+                            <div key={set.id} className="grid grid-cols-[6rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5 items-center group/set">
                               <button
                                 onClick={() => cycleSetType(ex.id, set.id)}
                                 title={SET_TYPE_TITLES[set.type]}
