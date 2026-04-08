@@ -35,6 +35,7 @@ type Exercise = {
   name: string;
   setRows: SetRow[];
   tempo: string;
+  rest: string;
   notes: string;
 };
 
@@ -122,6 +123,7 @@ const newExercise = (): Exercise => ({
   name: '',
   setRows: [newSetRow(), newSetRow(), newSetRow()],
   tempo: '',
+  rest: '',
   notes: '',
 });
 
@@ -439,7 +441,7 @@ export default function PTDashboard() {
     setProgram(p => ({ ...p, days: p.days.map((d, i) => i === activeDay ? updated : d) }));
   };
 
-  const updateExercise = (exId: string, field: 'name' | 'tempo' | 'notes', value: string) => {
+  const updateExercise = (exId: string, field: 'name' | 'tempo' | 'rest' | 'notes', value: string) => {
     updateDay({ ...day, exercises: day.exercises.map(e => e.id === exId ? { ...e, [field]: value } : e) });
   };
 
@@ -820,10 +822,11 @@ export default function PTDashboard() {
                 {/* Exercise table */}
                 <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mb-4">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1.75rem_1fr_7rem_1fr_1.5rem] gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-200 text-[10px] text-stone-500 uppercase tracking-widest font-medium">
+                  <div className="grid grid-cols-[1.75rem_1fr_6rem_6rem_1fr_1.5rem] gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-200 text-[10px] text-stone-500 uppercase tracking-widest font-medium">
                     <span>#</span>
                     <span>Exercise</span>
                     <span>Tempo</span>
+                    <span>Rest</span>
                     <span>Notes</span>
                     <span />
                   </div>
@@ -833,7 +836,7 @@ export default function PTDashboard() {
                     {day.exercises.map((ex, ei) => (
                       <div key={ex.id} className="group">
                         {/* Exercise header */}
-                        <div className="grid grid-cols-[1.75rem_1fr_7rem_1fr_1.5rem] gap-3 px-4 pt-3 pb-2 items-start">
+                        <div className="grid grid-cols-[1.75rem_1fr_6rem_6rem_1fr_1.5rem] gap-3 px-4 pt-3 pb-2 items-start">
                           <span className="w-5 h-5 rounded bg-stone-100 text-stone-500 text-[11px] font-semibold flex items-center justify-center mt-0.5 shrink-0">
                             {ei + 1}
                           </span>
@@ -854,6 +857,12 @@ export default function PTDashboard() {
                             value={ex.tempo}
                             onChange={e => updateExercise(ex.id, 'tempo', e.target.value)}
                             placeholder="3-1-2"
+                            className="w-full text-sm text-stone-900 focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
+                          />
+                          <input
+                            value={ex.rest}
+                            onChange={e => updateExercise(ex.id, 'rest', e.target.value)}
+                            placeholder="90s"
                             className="w-full text-sm text-stone-900 focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
                           />
                           <input
