@@ -30,10 +30,50 @@ type SetRow = {
   rpe: string;
 };
 
+type ActivityType =
+  | 'Strength'
+  | 'Run' | 'Swim' | 'Cycle' | 'Row' | 'Ski Erg'
+  | 'Walk' | 'HIIT' | 'Assault Bike' | 'Stair Climber'
+  | 'Jump Rope' | 'Elliptical';
+
+const CARDIO_ACTIVITIES: ActivityType[] = [
+  'Run', 'Swim', 'Cycle', 'Row', 'Ski Erg',
+  'Walk', 'HIIT', 'Assault Bike', 'Stair Climber',
+  'Jump Rope', 'Elliptical',
+];
+
+const isCardio = (type: ActivityType) => CARDIO_ACTIVITIES.includes(type);
+
+const ACTIVITY_COLORS: Record<ActivityType, string> = {
+  Strength:      'bg-stone-100 text-stone-600',
+  Run:           'bg-orange-50 text-orange-600',
+  Swim:          'bg-blue-50 text-blue-600',
+  Cycle:         'bg-yellow-50 text-yellow-700',
+  Row:           'bg-cyan-50 text-cyan-700',
+  'Ski Erg':     'bg-indigo-50 text-indigo-600',
+  Walk:          'bg-green-50 text-green-700',
+  HIIT:          'bg-red-50 text-red-600',
+  'Assault Bike':'bg-rose-50 text-rose-600',
+  'Stair Climber':'bg-purple-50 text-purple-600',
+  'Jump Rope':   'bg-pink-50 text-pink-600',
+  Elliptical:    'bg-teal-50 text-teal-600',
+};
+
+type CardioRow = {
+  id: string;
+  reps: string;      // intervals, e.g. "5"
+  distance: string;  // e.g. "1km", "400m"
+  duration: string;  // e.g. "5:00", "25:00"
+  pace: string;      // e.g. "5:30/km", "2:00/100m", "24 spm"
+  effort: string;    // Easy / Tempo / Hard / Max or RPE
+};
+
 type Exercise = {
   id: string;
+  activityType: ActivityType;
   name: string;
   setRows: SetRow[];
+  cardioRows: CardioRow[];
   tempo: string;
   rest: string;
   notes: string;
@@ -97,6 +137,7 @@ const EXERCISE_LIBRARY: Record<string, string[]> = {
   Core: ['Plank', 'Cable Crunch', 'Hanging Leg Raise', 'Ab Wheel', 'Russian Twist', 'Dead Bug'],
 };
 
+
 function makeAvatar(name: string): string {
   const parts = name.trim().split(/\s+/);
   if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
@@ -123,10 +164,21 @@ const newSetRow = (type: SetType = 'working'): SetRow => ({
   rpe: '',
 });
 
-const newExercise = (): Exercise => ({
+const newCardioRow = (): CardioRow => ({
+  id: `cr-${Date.now()}-${Math.random()}`,
+  reps: '1',
+  distance: '',
+  duration: '',
+  pace: '',
+  effort: '',
+});
+
+const newExercise = (activityType: ActivityType = 'Strength'): Exercise => ({
   id: `ex-${Date.now()}-${Math.random()}`,
+  activityType,
   name: '',
-  setRows: [newSetRow(), newSetRow(), newSetRow()],
+  setRows: !isCardio(activityType) ? [newSetRow(), newSetRow(), newSetRow()] : [],
+  cardioRows: isCardio(activityType) ? [newCardioRow()] : [],
   tempo: '',
   rest: '',
   notes: '',
@@ -160,8 +212,10 @@ function blankProgram(): Program {
 function demoEx(name: string, sets: number, reps: string, weight: string, rest = '90s', type: SetType = 'working'): Exercise {
   return {
     id: `ex-${Math.random()}`,
+    activityType: 'Strength',
     name,
     setRows: Array.from({ length: sets }, () => ({ id: `s-${Math.random()}`, type, reps, weight, rpe: '' })),
+    cardioRows: [],
     tempo: '',
     rest,
     notes: '',
@@ -171,11 +225,13 @@ function demoEx(name: string, sets: number, reps: string, weight: string, rest =
 function demoWarmupEx(name: string, warmupSets: [string, string][], workSets: [string, string][], rest = '3min'): Exercise {
   return {
     id: `ex-${Math.random()}`,
+    activityType: 'Strength',
     name,
     setRows: [
       ...warmupSets.map(([r, w]) => ({ id: `s-${Math.random()}`, type: 'warmup' as SetType, reps: r, weight: w, rpe: '' })),
       ...workSets.map(([r, w]) => ({ id: `s-${Math.random()}`, type: 'working' as SetType, reps: r, weight: w, rpe: '' })),
     ],
+    cardioRows: [],
     tempo: '',
     rest,
     notes: '',
@@ -672,7 +728,39 @@ export default function PTDashboard() {
     });
   };
 
-  const addExercise = () => updateDay({ ...day, exercises: [...day.exercises, newExercise()] });
+  const updateCardioRow = (exId: string, rowId: string, field: keyof CardioRow, value: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId
+          ? { ...e, cardioRows: e.cardioRows.map(r => r.id === rowId ? { ...r, [field]: value } : r) }
+          : e
+      ),
+    });
+  };
+
+  const addCardioRow = (exId: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId ? { ...e, cardioRows: [...e.cardioRows, newCardioRow()] } : e
+      ),
+    });
+  };
+
+  const removeCardioRow = (exId: string, rowId: string) => {
+    updateDay({
+      ...day,
+      exercises: day.exercises.map(e =>
+        e.id === exId && e.cardioRows.length > 1
+          ? { ...e, cardioRows: e.cardioRows.filter(r => r.id !== rowId) }
+          : e
+      ),
+    });
+  };
+
+  const addExercise = (activityType: ActivityType = 'Strength') =>
+    updateDay({ ...day, exercises: [...day.exercises, newExercise(activityType)] });
 
   const removeExercise = (exId: string) => {
     if (day.exercises.length === 1) return;
@@ -1124,10 +1212,11 @@ export default function PTDashboard() {
                 {/* Exercise table */}
                 <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden mb-4">
                   {/* Table header */}
-                  <div className="grid grid-cols-[1.75rem_1fr_6rem_6rem_1fr_1.5rem] gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-200 text-[10px] text-stone-500 uppercase tracking-widest font-medium">
+                  <div className="grid grid-cols-[1.75rem_5rem_1fr_6rem_6rem_1fr_1.5rem] gap-3 px-4 py-2.5 bg-stone-50 border-b border-stone-200 text-[10px] text-stone-500 uppercase tracking-widest font-medium">
                     <span>#</span>
-                    <span>Exercise</span>
-                    <span>Tempo</span>
+                    <span>Activity</span>
+                    <span>Exercise / Name</span>
+                    <span>Tempo / Rest</span>
                     <span>Rest</span>
                     <span>Notes</span>
                     <span />
@@ -1138,27 +1227,33 @@ export default function PTDashboard() {
                     {day.exercises.map((ex, ei) => (
                       <div key={ex.id} className="group">
                         {/* Exercise header */}
-                        <div className="grid grid-cols-[1.75rem_1fr_6rem_6rem_1fr_1.5rem] gap-3 px-4 pt-3 pb-2 items-start">
+                        <div className="grid grid-cols-[1.75rem_5rem_1fr_6rem_6rem_1fr_1.5rem] gap-3 px-4 pt-3 pb-2 items-start">
                           <span className="w-5 h-5 rounded bg-stone-100 text-stone-500 text-[11px] font-semibold flex items-center justify-center mt-0.5 shrink-0">
                             {ei + 1}
+                          </span>
+                          {/* Activity type badge */}
+                          <span className={`text-[10px] font-semibold px-2 py-1 rounded-md mt-0.5 shrink-0 truncate ${ACTIVITY_COLORS[ex.activityType]}`}>
+                            {ex.activityType}
                           </span>
                           <div className="flex items-center gap-2">
                             <input
                               value={ex.name}
                               onChange={e => updateExercise(ex.id, 'name', e.target.value)}
-                              placeholder="Exercise name"
+                              placeholder={isCardio(ex.activityType) ? `e.g. Interval ${ex.activityType}` : 'Exercise name'}
                               className="flex-1 text-sm text-stone-900 font-semibold focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
                             />
-                            <button
-                              onClick={() => { setLibraryTarget(ex.id); setShowLibrary(true); }}
-                              className="text-stone-400 hover:text-green-600 text-xs opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                              title="Pick from library"
-                            >lib</button>
+                            {!isCardio(ex.activityType) && (
+                              <button
+                                onClick={() => { setLibraryTarget(ex.id); setShowLibrary(true); }}
+                                className="text-stone-400 hover:text-green-600 text-xs opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                                title="Pick from library"
+                              >lib</button>
+                            )}
                           </div>
                           <input
                             value={ex.tempo}
                             onChange={e => updateExercise(ex.id, 'tempo', e.target.value)}
-                            placeholder="3-1-2"
+                            placeholder={isCardio(ex.activityType) ? '—' : '3-1-2'}
                             className="w-full text-sm text-stone-900 focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors"
                           />
                           <input
@@ -1184,80 +1279,87 @@ export default function PTDashboard() {
                           </button>
                         </div>
 
-                        {/* Set rows */}
-                        <div className="pl-11 pr-4 pb-3">
-                          {/* Set sub-header */}
-                          <div className="grid grid-cols-[6rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5">
-                            <span className="text-[9px] text-stone-400 uppercase tracking-widest">Type</span>
-                            <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Reps</span>
-                            <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Weight</span>
-                            <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">RPE</span>
-                            <span />
-                          </div>
-                          {ex.setRows.map((set) => (
-                            <div key={set.id} className="grid grid-cols-[6rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5 items-center group/set">
-                              <button
-                                onClick={() => cycleSetType(ex.id, set.id)}
-                                title={SET_TYPE_TITLES[set.type]}
-                                className={`text-[10px] font-bold px-2 py-1 rounded-md transition-all text-left ${SET_TYPE_COLORS[set.type]}`}
-                              >
-                                {SET_TYPE_LABELS[set.type]}
-                              </button>
-                              <input
-                                value={set.reps}
-                                onChange={e => updateSetRow(ex.id, set.id, 'reps', e.target.value)}
-                                placeholder="—"
-                                type="number"
-                                className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
-                              />
-                              <input
-                                value={set.weight}
-                                onChange={e => updateSetRow(ex.id, set.id, 'weight', e.target.value)}
-                                placeholder="kg"
-                                type="number"
-                                className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
-                              />
-                              <input
-                                value={set.rpe}
-                                onChange={e => updateSetRow(ex.id, set.id, 'rpe', e.target.value)}
-                                placeholder="—"
-                                type="number"
-                                min="1" max="10"
-                                className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]"
-                              />
-                              <button
-                                onClick={() => removeSetRow(ex.id, set.id)}
-                                disabled={ex.setRows.length === 1}
-                                className="text-stone-300 hover:text-red-400 transition-colors disabled:opacity-0 opacity-0 group-hover/set:opacity-100 flex items-center justify-center"
-                              >
-                                <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
-                                  <line x1="2" y1="6" x2="10" y2="6"/>
-                                </svg>
-                              </button>
+                        {/* Strength set rows */}
+                        {!isCardio(ex.activityType) && (
+                          <div className="pl-11 pr-4 pb-3">
+                            <div className="grid grid-cols-[6rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5">
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest">Type</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Reps</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Weight</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">RPE</span>
+                              <span />
                             </div>
-                          ))}
-                          <button
-                            onClick={() => addSetRow(ex.id)}
-                            className="text-xs text-stone-400 hover:text-green-600 transition-colors mt-0.5"
-                          >
-                            + set
-                          </button>
-                        </div>
+                            {ex.setRows.map((set) => (
+                              <div key={set.id} className="grid grid-cols-[6rem_4rem_4.5rem_3.5rem_1.5rem] gap-2 mb-1.5 items-center group/set">
+                                <button
+                                  onClick={() => cycleSetType(ex.id, set.id)}
+                                  title={SET_TYPE_TITLES[set.type]}
+                                  className={`text-[10px] font-bold px-2 py-1 rounded-md transition-all text-left ${SET_TYPE_COLORS[set.type]}`}
+                                >
+                                  {SET_TYPE_LABELS[set.type]}
+                                </button>
+                                <input value={set.reps} onChange={e => updateSetRow(ex.id, set.id, 'reps', e.target.value)} placeholder="—" type="number" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]" />
+                                <input value={set.weight} onChange={e => updateSetRow(ex.id, set.id, 'weight', e.target.value)} placeholder="kg" type="number" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]" />
+                                <input value={set.rpe} onChange={e => updateSetRow(ex.id, set.id, 'rpe', e.target.value)} placeholder="—" type="number" min="1" max="10" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]" />
+                                <button onClick={() => removeSetRow(ex.id, set.id)} disabled={ex.setRows.length === 1} className="text-stone-300 hover:text-red-400 transition-colors disabled:opacity-0 opacity-0 group-hover/set:opacity-100 flex items-center justify-center">
+                                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                                </button>
+                              </div>
+                            ))}
+                            <button onClick={() => addSetRow(ex.id)} className="text-xs text-stone-400 hover:text-green-600 transition-colors mt-0.5">+ set</button>
+                          </div>
+                        )}
+
+                        {/* Cardio interval rows */}
+                        {isCardio(ex.activityType) && (
+                          <div className="pl-11 pr-4 pb-3">
+                            <div className="grid grid-cols-[3rem_5rem_5rem_6rem_4.5rem_1.5rem] gap-2 mb-1.5">
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Reps</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Distance</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Duration</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Pace / Rate</span>
+                              <span className="text-[9px] text-stone-400 uppercase tracking-widest text-center">Effort</span>
+                              <span />
+                            </div>
+                            {ex.cardioRows.map((row) => (
+                              <div key={row.id} className="grid grid-cols-[3rem_5rem_5rem_6rem_4.5rem_1.5rem] gap-2 mb-1.5 items-center group/row">
+                                <input value={row.reps} onChange={e => updateCardioRow(ex.id, row.id, 'reps', e.target.value)} placeholder="1" type="number" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors [appearance:textfield]" />
+                                <input value={row.distance} onChange={e => updateCardioRow(ex.id, row.id, 'distance', e.target.value)} placeholder="5km" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors" />
+                                <input value={row.duration} onChange={e => updateCardioRow(ex.id, row.id, 'duration', e.target.value)} placeholder="25:00" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors" />
+                                <input value={row.pace} onChange={e => updateCardioRow(ex.id, row.id, 'pace', e.target.value)} placeholder="5:30/km" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors" />
+                                <input value={row.effort} onChange={e => updateCardioRow(ex.id, row.id, 'effort', e.target.value)} placeholder="Easy" className="w-full text-sm text-stone-900 text-center focus:outline-none placeholder-stone-400 bg-transparent border-b border-transparent focus:border-green-400 pb-0.5 transition-colors" />
+                                <button onClick={() => removeCardioRow(ex.id, row.id)} disabled={ex.cardioRows.length === 1} className="text-stone-300 hover:text-red-400 transition-colors disabled:opacity-0 opacity-0 group-hover/row:opacity-100 flex items-center justify-center">
+                                  <svg width="10" height="10" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="2" y1="6" x2="10" y2="6"/></svg>
+                                </button>
+                              </div>
+                            ))}
+                            <button onClick={() => addCardioRow(ex.id)} className="text-xs text-stone-400 hover:text-green-600 transition-colors mt-0.5">+ interval</button>
+                          </div>
+                        )}
                       </div>
                     ))}
                   </div>
 
-                  {/* Add exercise */}
+                  {/* Add exercise — activity type picker */}
                   <div className="px-4 py-3 border-t border-stone-100">
-                    <button onClick={addExercise} className="text-sm text-stone-500 hover:text-green-600 transition-colors">
-                      + Add exercise
-                    </button>
+                    <p className="text-[9px] text-stone-400 uppercase tracking-widest mb-2">Add activity</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(['Strength', ...CARDIO_ACTIVITIES] as ActivityType[]).map(type => (
+                        <button
+                          key={type}
+                          onClick={() => addExercise(type)}
+                          className={`text-xs px-2.5 py-1 rounded-lg font-medium transition-all border ${ACTIVITY_COLORS[type]} border-current/20 hover:opacity-80`}
+                        >
+                          + {type}
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
 
                 {/* Day summary */}
                 <p className="text-xs text-stone-500 text-right">
-                  {day.exercises.filter(e => e.name.trim()).length} exercise{day.exercises.filter(e => e.name.trim()).length !== 1 ? 's' : ''} · {day.exercises.reduce((sum, e) => sum + e.setRows.length, 0)} total sets
+                  {day.exercises.filter(e => e.name.trim()).length} exercise{day.exercises.filter(e => e.name.trim()).length !== 1 ? 's' : ''} · {day.exercises.filter(e => !isCardio(e.activityType)).reduce((sum, e) => sum + e.setRows.length, 0)} sets · {day.exercises.filter(e => isCardio(e.activityType)).length} cardio
                 </p>
               </>
             )}
