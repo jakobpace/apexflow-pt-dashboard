@@ -660,6 +660,13 @@ export default function PTDashboard() {
   const [saveState, setSaveState] = useState<'idle' | 'saved'>('idle');
   const [copyDayTarget, setCopyDayTarget] = useState<{ wi: number; di: number } | null>(null);
 
+  // ── AI Chat state ──
+  const [chatMessages, setChatMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([
+    { role: 'ai', text: 'Hey! I\'m your AI coaching assistant. Tell me about the client\'s goals and I\'ll help you build the perfect program.' },
+  ]);
+  const [chatInput, setChatInput] = useState('');
+  const [chatOpen, setChatOpen] = useState(true);
+
   const week = program.weekBlocks[activeWeek] ?? program.weekBlocks[0];
   const day = week?.days[activeDay] ?? week?.days[0];
 
@@ -1054,6 +1061,76 @@ export default function PTDashboard() {
                       className="w-full border border-stone-200 rounded-xl px-3 py-2.5 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400 resize-none"
                     />
                   </div>
+                </div>
+
+                {/* ── AI Coach Chat ── */}
+                <div className="bg-white rounded-2xl border border-stone-200 mb-6 overflow-hidden">
+                  <button
+                    onClick={() => setChatOpen(o => !o)}
+                    className="w-full flex items-center justify-between px-5 py-3.5 hover:bg-stone-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-2 h-2 rounded-full bg-green-500" style={{ boxShadow: '0 0 6px rgba(34,197,94,0.6)' }} />
+                      <span className="text-sm font-semibold text-stone-900">AI Coach</span>
+                      <span className="text-[10px] font-semibold tracking-widest text-stone-400 uppercase border border-stone-200 px-2 py-0.5 rounded-md">Coming Soon</span>
+                    </div>
+                    <span className="text-stone-400 text-xs">{chatOpen ? '▲' : '▼'}</span>
+                  </button>
+
+                  {chatOpen && (
+                    <>
+                      {/* Messages */}
+                      <div className="px-5 py-3 space-y-3 max-h-64 overflow-y-auto border-t border-stone-100">
+                        {chatMessages.map((msg, i) => (
+                          <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                            {msg.role === 'ai' && (
+                              <div className="w-6 h-6 rounded-full bg-green-600 flex items-center justify-center text-white text-[10px] font-bold mr-2 mt-0.5 shrink-0">A</div>
+                            )}
+                            <div className={`max-w-[80%] px-3.5 py-2.5 rounded-2xl text-sm leading-snug ${
+                              msg.role === 'user'
+                                ? 'bg-green-600 text-white rounded-tr-sm'
+                                : 'bg-stone-100 text-stone-800 rounded-tl-sm'
+                            }`}>
+                              {msg.text}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Input */}
+                      <div className="flex gap-2 px-4 py-3 border-t border-stone-100">
+                        <input
+                          type="text"
+                          value={chatInput}
+                          onChange={e => setChatInput(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter' && chatInput.trim()) {
+                              setChatMessages(prev => [
+                                ...prev,
+                                { role: 'user', text: chatInput.trim() },
+                                { role: 'ai', text: 'AI integration coming soon — your message has been noted.' },
+                              ]);
+                              setChatInput('');
+                            }
+                          }}
+                          placeholder="Ask AI to build a program, suggest exercises..."
+                          className="flex-1 border border-stone-200 rounded-xl px-3.5 py-2 text-sm text-stone-900 focus:outline-none focus:border-green-400 placeholder-stone-400"
+                        />
+                        <button
+                          onClick={() => {
+                            if (!chatInput.trim()) return;
+                            setChatMessages(prev => [
+                              ...prev,
+                              { role: 'user', text: chatInput.trim() },
+                              { role: 'ai', text: 'AI integration coming soon — your message has been noted.' },
+                            ]);
+                            setChatInput('');
+                          }}
+                          className="px-4 py-2 bg-green-600 text-white text-sm font-semibold rounded-xl hover:bg-green-500 transition-all"
+                        >Send</button>
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Week-by-week structure */}
